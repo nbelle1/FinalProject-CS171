@@ -39,6 +39,7 @@
   ],
   "compounds": [
     {
+      "default": true,
       "name": "Start All Servers",
       "configurations": [
         "network_server",

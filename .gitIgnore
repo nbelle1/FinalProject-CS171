@@ -1,3 +1,4 @@
 .env
 cs171_final/
 .DS_Store
+__pycache__

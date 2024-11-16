@@ -1,3 +1,4 @@
+compile:
 server:
 	python3 -u server.py
 network_server:
