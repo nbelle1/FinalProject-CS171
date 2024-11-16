@@ -3,6 +3,9 @@
 from enum import Enum
 
 class message(Enum):
+    """
+    Used To Unify the type of message being sent
+    """
     SERVER_INIT = 1
     SERVER_KILL = 2
     NEW_CONTEXT = 3
