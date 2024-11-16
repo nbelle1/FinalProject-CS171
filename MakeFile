@@ -1,0 +1,6 @@
+compile:
+server:
+	python3 -u server.py
+network_server:
+	python3 -u network_servererver.py
+
