@@ -1,17 +1,22 @@
 # server.py
 
 import socket
+import time
+import sys
+import threading
 from shared import message
 from key_value import KeyValue
 
 keyValue = KeyValue()
 networkServer = None
+stop_event = threading.Event()
 
 SERVER_NUM = -1
 
 # ------  SERVER  ------
 def connect_server():
     """
+    Dakota
     Connect to server.
     Receive initial message from server (expecting SERVER_INIT <num>).
     Parse message to retrieve server number and assign to SERVER_NUM.
@@ -22,6 +27,7 @@ def connect_server():
 
 def send_server_message(message_type, destination_server, args):
     """
+    Dakota
     Send a message to the specified server with a given message type and arguments.
     Format message as <SERVER_NUM> <destination_server> <message_type> <args>.
     Use networkServer to send the formatted message.
@@ -30,6 +36,7 @@ def send_server_message(message_type, destination_server, args):
 
 def get_server_message():
     """
+    Dakota
     Continuously receive messages from other servers or clients.
     Parse incoming message to identify message type.
     Based on message type, call the appropriate server function.
@@ -39,6 +46,7 @@ def get_server_message():
 
 def server_new_context():
     """
+    Nik
     Create a new context using the keyValue object (kv).
     Call kv.create_context() to initialize the context.
     """
@@ -46,6 +54,7 @@ def server_new_context():
 
 def server_create_query():
     """
+    Nik
     Create a query in the specified context.
     Call kv.create_query() to add the query.
     Generate a response by calling query_gemini().
@@ -72,6 +81,7 @@ def server_save_answer():
 # ------  USER  ------
 def get_user_input():
     """
+    Dakota
     Take input from the user and call appropriate functions based on input type.
     Example: if user requests a new context, call user_new_context().
     """
@@ -79,6 +89,7 @@ def get_user_input():
 
 def user_new_context(user_message):
     """
+    Nik
     Process request to create a new context.
     Call get_consensus() to get agreement from all servers.
     Send message NEW_CONTEXT to all servers via send_server_message().
@@ -88,6 +99,7 @@ def user_new_context(user_message):
 
 def user_create_query(user_message):
     """
+    Nik
     Process request to create a query within an existing context.
     Call get_consensus() for server consensus.
     Send CREATE_QUERY message to all servers via send_server_message().
@@ -109,6 +121,7 @@ def user_select_answer(user_message):
 
 def user_view_context(user_message):
     """
+    Nik
     Retrieve and display the data for a specified context.
     Use kv.view(context_id) to fetch context details.
     """
@@ -116,6 +129,7 @@ def user_view_context(user_message):
 
 def user_view_all_context(user_message):
     """
+    Nik
     Retrieve and display all contexts.
     Use kv.view_all() to list all contexts.
     """
@@ -135,6 +149,7 @@ def get_consensus():
 # ------ GEMINI ------
 def query_gemini():
     """
+    Nik
     Send a query to the Gemini LLM and receive a response.
     Return response to calling function.
     """
@@ -144,4 +159,13 @@ def query_gemini():
 if __name__ == "__main__":
     print("Server")
     connect_server()
-    get_server_message()
+    threading.Thread(target=get_server_message).start()
+    threading.Thread(target=get_user_input).start()
+
+    while not stop_event.is_set():
+        time.sleep(0.5)
+        
+    sys.stdout.flush()
+    sys.exit(0)
+
+    

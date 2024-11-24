@@ -2,9 +2,16 @@
 
 from shared import message
 from key_value import KeyValue
+import threading
+import sys
+import time
+
 
 # Global Variables
 global server_running
+stop_event = threading.Event()
+
+
 socket_info = [
     [1, 2, 3],  # Socket numbers
     [None, None, None],  # Sockets (initially null)
@@ -56,8 +63,9 @@ def fail_Node(node_num):
     """
 
 # Start the server and listen for connections
-def start_server():
+def run_server():
     """
+    Dakota
     Pseudocode:
     - Setup server and port
     - While server is running:
@@ -69,6 +77,7 @@ def start_server():
 # Handle incoming server messages
 def get_server_message():
     """
+    Dakota
     Pseudocode:
     - Wait for server messages
     - Process messages based on their content
@@ -77,6 +86,7 @@ def get_server_message():
 # Forward messages to appropriate destinations
 def forward_server_message(message):
     """
+    Dakota
     Pseudocode:
     - Check destination server status
     - If dest_server == -1, forward to all except origin_server
@@ -101,3 +111,12 @@ def main():
 
 if __name__ == "__main__":
     print("Network Server")
+    setup_socket_info()
+    threading.Thread(target=run_server).start()
+    threading.Thread(target=get_user_input).start()
+
+    while not stop_event.is_set():
+        time.sleep(0.5)
+
+    sys.stdout.flush()
+    sys.exit(0)

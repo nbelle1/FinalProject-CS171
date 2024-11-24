@@ -5,6 +5,7 @@ class KeyValue:
 
     def __init__(self):
         """
+        Nik
         Initializes the KeyValue storage with an empty dictionary.
         Each context and its associated queries are stored in a nested structure.
         """
@@ -12,6 +13,7 @@ class KeyValue:
 
     def create_context(self, context_id):
         """
+        Nik
         Creates a new context with a unique identifier.
         Args:
             context_id (str): A unique identifier for the context.
@@ -20,6 +22,7 @@ class KeyValue:
 
     def create_query(self, context_id, query_string):
         """
+        Nik
         Adds a query to an existing context.
         Args:
             context_id (str): The identifier of the context.
@@ -29,6 +32,7 @@ class KeyValue:
 
     def save_answer(self, context_id, response_num):
         """
+        Nik
         Saves a selected answer to a specific query in a context.
         Args:
             context_id (str): The identifier of the context.
@@ -38,6 +42,7 @@ class KeyValue:
 
     def view(self, context_id):
         """
+        Nik
         Retrieves information for a specified context.
         Args:
             context_id (str): The identifier of the context.
@@ -48,6 +53,7 @@ class KeyValue:
 
     def view_all(self):
         """
+        Nik
         Retrieves all contexts and their associated data.
         Returns:
             dict: All stored contexts and their data.
