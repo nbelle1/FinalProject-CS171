@@ -140,20 +140,43 @@ def user_select_answer(user_message):
 
 def user_view_context(user_message):
     """
-    Nik
     Retrieve and display the data for a specified context.
-    Use kv.view(context_id) to fetch context details.
+    Use keyValue.view(context_id) to fetch context details.
+    Args:
+        user_message (str): The context ID provided by the user.
     """
-    print("TODO")
+    # Extract the context ID from the user message
+    context_id = user_message.replace("view", "").strip()
+    context_data = keyValue.view(context_id)  # Call the KeyValue store's view method
+
+    if not context_data:
+        print(f"Context '{context_id}' not found.")
+        return
+
+    # Format the context data for display
+    formatted_output = [f"Query: {item['query']}\nAnswer: {item['answer']}" for item in context_data]
+    print(f"{context_id} = \"\"\"\n" + "\n".join(formatted_output) + "\n\"\"\"")
 
 def user_view_all_context(user_message):
     """
-    Nik
     Retrieve and display all contexts.
-    Use kv.view_all() to list all contexts.
+    Use keyValue.view_all() to list all contexts.
     """
-    print("TODO")
+    all_contexts = keyValue.view_all()  # Call the KeyValue store's view_all method
 
+    if not all_contexts:
+        print("No contexts available.")
+        return
+
+    # Format all context data for display
+    formatted_output = []
+    for context_id, context_data in all_contexts.items():
+        formatted_output.append(f"{context_id} = \"\"\"")
+        for item in context_data:
+            formatted_output.append(f"Query: {item['query']}\nAnswer: {item['answer']}")
+        formatted_output.append("\"\"\"")
+
+    print("\n".join(formatted_output))
 
 # ------  CONSENSUS  ------
 def get_consensus():
