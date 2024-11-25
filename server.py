@@ -14,6 +14,7 @@ stop_event = threading.Event()
 
 SERVER_NUM = -1
 
+
 # ------  SERVER  ------
 def connect_server():
     """
@@ -256,7 +257,7 @@ if __name__ == "__main__":
     print("Server")
     connect_server()
     threading.Thread(target=get_user_input).start()
-
+    
     while not stop_event.is_set():
         time.sleep(0.5)
         
