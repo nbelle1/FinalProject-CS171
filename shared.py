@@ -12,3 +12,5 @@ class message(Enum):
     CREATE_QUERY = 4
     LLM_RESPONSE = 5
     SAVE_ANSWER = 6
+
+NETWORK_SERVER_PORT = 9000

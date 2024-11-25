@@ -4,8 +4,9 @@ import socket
 import time
 import sys
 import threading
-from shared import message
+from shared import message, NETWORK_SERVER_PORT
 from key_value import KeyValue
+
 
 keyValue = KeyValue()
 networkServer = None
@@ -23,6 +24,27 @@ def connect_server():
     Start listening for incoming messages by calling get_server_message().
     TODO: Implement a method to restore context/kv data in case of a crash.
     """
+    global networkServer
+
+    attempt = 0
+    max_retries = 5
+    interval = 0.5
+    while attempt < max_retries:
+        try:
+            networkServer = socket.socket(socket.AF_INET,socket.SOCK_STREAM)  # Create a TCP socket
+            networkServer.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            networkServer.connect(('127.0.0.1', NETWORK_SERVER_PORT)) # Connect to the server at localhost on port
+            print(f"Connected To Network Server on {NETWORK_SERVER_PORT}")
+            break
+        #except ConnectionRefusedError:
+        except (TimeoutError, ConnectionRefusedError):
+            attempt += 1
+            if attempt < max_retries:
+                time.sleep(interval)
+            else:
+                print(f"FAILED To Connect to Network Server on {NETWORK_SERVER_PORT}")
+                break
+    
     print("TODO")
 
 def send_server_message(message_type, destination_server, args):
@@ -104,7 +126,6 @@ def get_user_input():
             user_view_context(user_input)
         else:
             print(f"UNCRECOGNIZED INPUT {user_input}")
-    print("TODO")
 
 def user_new_context(user_message):
     """
