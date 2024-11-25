@@ -172,7 +172,25 @@ def user_new_context(user_message):
     Send message NEW_CONTEXT to all servers via send_server_message().
     Call kv.create_context() to create the context locally.
     """
-    print("TODO")
+    # Extract context ID from the user message
+    context_id = user_message.replace("create", "").strip()
+
+    if not context_id:
+        print("Error: Context ID cannot be empty.")
+        return
+
+    # Step 1: Get consensus from all servers
+    consensus = get_consensus()
+    if not consensus:
+        print("Consensus failed. Unable to create new context.")
+        return
+
+    # Step 2: Send NEW_CONTEXT message to all servers (MODIFY TO SEND JSON)
+    send_server_message(message.NEW_CONTEXT, -1, context_id)
+
+    # Step 3: Create context locally
+    keyValue.create_context(context_id)
+    print(f"New context '{context_id}' created successfully.")
 
 def user_create_query(user_message):
     """
@@ -184,7 +202,45 @@ def user_create_query(user_message):
     Obtain response from query_gemini() and add to llm_responses collection.
     Print the response for user.
     """
-    print("TODO")
+    # Extract context ID and query string from the user message
+    parts = user_message.replace("query", "").strip().split(":", 1)
+    if len(parts) != 2:
+        print("Error: Invalid input format. Use 'query <context_id>:<query_string>'")
+        return
+
+    context_id, query_string = parts[0].strip(), parts[1].strip()
+
+    if not context_id or not query_string:
+        print("Error: Context ID and query cannot be empty.")
+        return
+
+    # Step 1: Get consensus from all servers
+    consensus = get_consensus()
+    if not consensus:
+        print("Consensus failed. Unable to create new query.")
+        return
+
+    # Step 2: Send CREATE_QUERY message to all servers (MODIFY TO SEND JSON)
+    send_server_message(message.CREATE_QUERY, -1, f"{context_id}:{query_string}")
+
+    # Step 3: Create query locally
+    keyValue.create_query(context_id, query_string)
+
+    # Step 4: Retrieve the context as a string
+    context_string = keyValue.view(context_id)
+    if not context_string:
+        print(f"Error: Context '{context_id}' not found.")
+        return
+
+    # Step 5: Query Gemini
+    prompt_answer = "Answer: "
+    response = query_gemini(context_string + "\n" + prompt_answer)
+
+    # Step 6: Add the response to local KeyValue storage
+    keyValue.save_answer(context_id, response)
+
+    # Step 7: Print the response
+    print(f"LLM Response: {response}")
 
 def user_select_answer(user_message):
     """
