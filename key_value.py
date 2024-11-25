@@ -18,7 +18,11 @@ class KeyValue:
         Args:
             context_id (str): A unique identifier for the context.
         """
-        print("TODO")
+        if context_id in self.data:
+            print(f"Context with ID '{context_id}' already exists.")
+        else:
+            self.data[context_id] = {"queries": [], "responses": {}}
+            print(f"Context '{context_id}' created successfully.")
 
     def create_query(self, context_id, query_string):
         """
@@ -28,17 +32,34 @@ class KeyValue:
             context_id (str): The identifier of the context.
             query_string (str): The query to add within the context.
         """
-        print("TODO")
+        if context_id not in self.data:
+            print(f"Context '{context_id}' does not exist. Please create it first.")
+            return
 
-    def save_answer(self, context_id, response_num):
+        self.data[context_id]["queries"].append(query_string)
+        print(f"Query added to context '{context_id}': {query_string}")
+
+    def save_answer(self, context_id, response):
         """
         Nik
         Saves a selected answer to a specific query in a context.
         Args:
             context_id (str): The identifier of the context.
-            response_num (int): The index of the response to save.
+            response (str): Response to save.
         """
-        print("TODO")
+        if context_id not in self.data:
+            print(f"Context '{context_id}' does not exist.")
+            return
+
+        queries = self.data[context_id]["queries"]
+        if not queries:
+            print(f"No queries exist in context '{context_id}' to associate the response with.")
+            return
+
+        # Associate the response with the latest query
+        latest_query = queries[-1]
+        self.data[context_id]["responses"][latest_query] = response
+        print(f"Response saved for the latest query '{latest_query}': {response}")
 
     def view(self, context_id):
         """
@@ -49,13 +70,33 @@ class KeyValue:
         Returns:
             dict: The context data if it exists, otherwise None.
         """
-        print("TODO")
+        if context_id not in self.data:
+            return None
+
+        context_data = self.data[context_id]
+        queries = context_data["queries"]
+        responses = context_data["responses"]
+
+        # Return structured data
+        return [{"query": query, "answer": responses.get(query, "No answer provided")} for query in queries]
 
     def view_all(self):
         """
         Nik
         Retrieves all contexts and their associated data.
         Returns:
-            dict: All stored contexts and their data.
+            dict: A dictionary where each key is a context ID and the value is a list of query-answer pairs.
         """
-        print("TODO")
+        if not self.data:
+            return {}
+
+        # Build structured data for all contexts
+        result = {}
+        for context_id, context_data in self.data.items():
+            queries = context_data["queries"]
+            responses = context_data["responses"]
+            result[context_id] = [
+                {"query": query, "answer": responses.get(query, "No answer provided")}
+                for query in queries
+            ]
+        return result
