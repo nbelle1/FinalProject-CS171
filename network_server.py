@@ -1,11 +1,13 @@
 # network_server.py
 
-from shared import message, NETWORK_SERVER_PORT
-from key_value import KeyValue
-import threading
 import sys
 import time
 import socket
+import json
+from shared import message, NETWORK_SERVER_PORT
+from key_value import KeyValue
+import threading
+
 
 
 # Global Variables
@@ -114,7 +116,21 @@ def run_server():
                     #Sleep to enable server to setup message_handling
                     time.sleep(0.1)
                     #Send Server Server_Init message with ServerNum
-                    server_socket.send(f"0 0 {message.SERVER_INIT.value} {count}".encode('utf-8'))
+
+                    
+                    json_data = {
+                        "dest_server": -1,
+                        "sending_server": -1,
+                        "message_type": message.SERVER_INIT.value,
+                        "server_num": count
+                    }
+                    
+                    # Serialize to JSON
+                    serialized_message = json.dumps(json_data)
+                    server_socket.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
+
+
+                    #server_socket.send(f"0 0 {message.SERVER_INIT.value} {count}".encode('utf-8'))
                     break
 
             # Create a new thread
@@ -135,17 +151,17 @@ def get_server_message(server):
     """
     while not stop_event.is_set():
         try:
-            message = server.recv(1024).decode('utf-8') #Receive server response
-            if not message:
+            server_message = server.recv(1024).decode('utf-8') #Receive server response
+            if not server_message:
                 print("Server Disconnected")
                 break
-            threading.Thread(target=forward_server_message, args=(server, message,)).start()
+            threading.Thread(target=forward_server_message, args=(server, server_message,)).start()
         except socket.error:
             continue
 
 
 # Forward messages to appropriate destinations
-def forward_server_message(message):
+def forward_server_message(server_message):
     """
     Dakota
     Pseudocode:
@@ -154,13 +170,17 @@ def forward_server_message(message):
     - Otherwise, forward to the specified destination
     Message format <destination server> <rest of message>
     """
-    dest_server_num = message.split()[0]
     try:
-        dest_server = socket_info[1][dest_server_num]
-        dest_server.send(f"{message}".encode('utf-8'))
+
+        message_data = json.loads(server_message.decode('utf-8'))  # Convert bytes to string, then parse JSON
+
+        dest_server = socket_info[1][message_data["dest_server"]]
+        serialized_message = json.dumps(message_data)
+
+        dest_server.send(f"{serialized_message}".encode('utf-8'))
     except Exception:
         #Timeout enabled so that will be nonblocking
-        print(f"FAILED FORWARDING MESSAGE: {message}")
+        print(f"FAILED FORWARDING MESSAGE: {server_message}")
 
 
 # Check the status of links and nodes

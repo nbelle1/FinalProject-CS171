@@ -14,3 +14,28 @@ class message(Enum):
     SAVE_ANSWER = 6
 
 NETWORK_SERVER_PORT = 9000
+
+
+"""
+JSON Format:
+
+message
+    "dest_server": int
+    "sending_server": int 
+    "message_type": int
+
+    
+    if SERVER_INIT:
+        "server_num": int
+    if SERVER_KILL:
+    if NEW_CONTEXT:
+    if CREATE_QUERY:
+        "context_id": int
+        "query_string": string
+    if LLM_RESPONSE:
+    if SAVE_ANSWER
+
+
+
+
+"""

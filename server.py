@@ -5,6 +5,7 @@ import time
 import sys
 import threading
 import os
+import json
 from dotenv import load_dotenv
 import google.generativeai as genai
 from shared import message, NETWORK_SERVER_PORT
@@ -52,14 +53,24 @@ def connect_server():
                 break
     
 
-def send_server_message(message_type, destination_server, args):
+def send_server_message(dest_server, json_data):
     """
     Dakota
     Send a message to the specified server with a given message type and arguments.
-    Format message as <SERVER_NUM> <destination_server> <message_type> <args>.
+    Format message as <destination_server> <SERVER_NUM> <message_type> <args>.
     Use networkServer to send the formatted message.
     """
-    print("TODO")
+    # Convert all elements to strings and join with spaces
+    json_data["dest_server"] = dest_server
+    json_data["sending_server"] = SERVER_NUM
+
+    serialized_message = json.dumps(json_data)
+    networkServer.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
+
+
+    # Send networkServer Specific message
+    #networkServer.send(f"{destination_server} {SERVER_NUM} {message_type.value} {args_str} ".encode('utf-8'))
+
 
 def get_server_message():
     """
@@ -77,33 +88,35 @@ def get_server_message():
                 break
 
             #Get message Type from Message
-            message_type = message(int(server_message.split()[2]))
+            message_data = json.loads(server_message)  # Convert bytes to string, then parse JSON
+            message_type = message(message_data["message_type"])
 
             #Start function based on message type
             if message_type == message.SERVER_INIT:
-                server_init_message(server_message)
+                server_init_message(message_data)
             elif message_type == message.NEW_CONTEXT:
-                server_new_context(server_message)
+                server_new_context(message_data)
             elif message_type == message.CREATE_QUERY:
-                server_create_query(server_message)
+                server_create_query(message_data)
             elif message_type == message.LLM_RESPONSE:
-                server_llm_response(server_message)
+                server_llm_response(message_data)
             elif message_type == message.SAVE_ANSWER:
-                server_save_answer(server_message)
+                server_save_answer(message_data)
         except Exception:
+            print("Fail Getting Server Message")
             continue
     print("TODO")
 
-def server_init_message(server_message):
+def server_init_message(message_data):
     """
     Used to asign the server num when connected to the network server
     """
     global SERVER_NUM
-    server_num = server_message.split()[3]
+    server_num = message_data["server_num"]
     SERVER_NUM = server_num
     print(f"Assigned Server Number {SERVER_NUM}")
 
-def server_new_context(server_message):
+def server_new_context(message_data):
     """
     Nik
     Create a new context using the keyValue object (kv).
@@ -111,7 +124,7 @@ def server_new_context(server_message):
     """
     print("TODO")
 
-def server_create_query(server_message):
+def server_create_query(message_data):
     """
     Nik
     Create a query in the specified context.
@@ -121,14 +134,14 @@ def server_create_query(server_message):
     """
     print("TODO")
 
-def server_llm_response(server_message):
+def server_llm_response(message_data):
     """
     Add the received LLM response to the llm_responses collection.
     Print the response for server-side logging.
     """
     print("TODO")
 
-def server_save_answer(server_message):
+def server_save_answer(message_data):
     """
     Save the selected answer to the keyValue storage.
     Call kv.save_answer() to persist the answer.
