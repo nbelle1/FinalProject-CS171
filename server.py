@@ -85,6 +85,25 @@ def get_user_input():
     Take input from the user and call appropriate functions based on input type.
     Example: if user requests a new context, call user_new_context().
     """
+    while not stop_event.is_set():
+        user_input = input() # Input message from the user
+        if user_input.lower() == 'exit':
+            stop_event.set()
+            if networkServer != None:
+                networkServer.close()
+            break
+        elif user_input.startswith("create"):
+            user_new_context(user_input)
+        elif user_input.startswith("query"):
+            user_create_query(user_input)
+        elif user_input.startswith("choose"):
+            user_select_answer(user_input)
+        elif user_input.startswith("viewall"):
+            user_view_all_context(user_input)
+        elif user_input.startswith("view"):
+            user_view_context(user_input)
+        else:
+            print(f"UNCRECOGNIZED INPUT {user_input}")
     print("TODO")
 
 def user_new_context(user_message):
