@@ -4,6 +4,9 @@ import socket
 import time
 import sys
 import threading
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
 from shared import message, NETWORK_SERVER_PORT
 from key_value import KeyValue
 
@@ -208,9 +211,8 @@ def user_view_context(user_message):
         print(f"Context '{context_id}' not found.")
         return
 
-    # Format the context data for display
-    formatted_output = [f"Query: {item['query']}\nAnswer: {item['answer']}" for item in context_data]
-    print(f"{context_id} = \"\"\"\n" + "\n".join(formatted_output) + "\n\"\"\"")
+    # Print the formatted context data with quotation marks and context ID
+    print(f"{context_id} = \"\"\"\n{context_data}\n\"\"\"")
 
 def user_view_all_context(user_message):
     """
@@ -243,14 +245,34 @@ def get_consensus():
     print("TODO")
 
 
+def setup_gemini():
+    # Load environment variables from .env file
+    load_dotenv()
+
+    # Configure the Gemini API using the loaded environment variable
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+
 # ------ GEMINI ------
-def query_gemini():
+def query_gemini(context, prompt_answer="Answer: "):
     """
-    Nik
-    Send a query to the Gemini LLM and receive a response.
-    Return response to calling function.
+    Query the Gemini LLM with a given context and prompt.
+    Args:
+        context (str): The context string to send to Gemini.
+        prompt_answer (str): The prompt indicating where Gemini should generate a response.
+    Returns:
+        str: The generated response text from Gemini.
     """
-    print("TODO")
+    try:
+        # Initialize the Gemini generative model
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # Generate content using the context and prompt
+        response = model.generate_content(context + prompt_answer)
+        return response.text  # Return the generated text
+    except Exception as e:
+        print(f"Error querying Gemini: {e}")
+        return "Error querying Gemini API"
 
 
 if __name__ == "__main__":

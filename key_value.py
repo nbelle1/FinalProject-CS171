@@ -77,8 +77,15 @@ class KeyValue:
         queries = context_data["queries"]
         responses = context_data["responses"]
 
-        # Return structured data
-        return [{"query": query, "answer": responses.get(query, "No answer provided")} for query in queries]
+        # Build a formatted string for the queries and answers
+        formatted_output = []
+        for query in queries:
+            answer = responses.get(query, "No answer provided")
+            formatted_output.append(f"Query: {query}\nAnswer: {answer}")
+
+        return "\n".join(formatted_output)
+    
+    
 
     def view_all(self):
         """
