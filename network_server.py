@@ -100,16 +100,22 @@ def run_server():
     server.settimeout(1)  # Set a timeout of 1 second for accepting connections
     print(f"Server started on port {NETWORK_SERVER_PORT}")
 
-    count = 0
     while not stop_event.is_set():
         try:
-            server_socket, addr = server.accept() # Accept client connections
             
-            socket_info[1][count] = server_socket
+            server_socket, addr = server.accept() # Accept client connections
 
-            count +=1
-
-            print(f"Accepted connection from {addr} as Server {count}")
+            #Add connected socket to first available socket in socket_info
+            for count, soc in enumerate(socket_info[1]):
+                if soc is None:
+                    # Add socket to socket_info at the correct index
+                    socket_info[1][count] = server_socket
+                    print(f"Accepted connection from {addr} as Server {count}")
+                    #Sleep to enable server to setup message_handling
+                    time.sleep(0.1)
+                    #Send Server Server_Init message with ServerNum
+                    server_socket.send(f"0 0 {message.SERVER_INIT.value} {count}".encode('utf-8'))
+                    break
 
             # Create a new thread
             server_handler = threading.Thread(target=get_server_message,args=(server_socket,))
@@ -127,6 +133,16 @@ def get_server_message(server):
     - Wait for server messages
     - Process messages based on their content
     """
+    while not stop_event.is_set():
+        try:
+            message = server.recv(1024).decode('utf-8') #Receive server response
+            if not message:
+                print("Server Disconnected")
+                break
+            threading.Thread(target=forward_server_message, args=(server, message,)).start()
+        except socket.error:
+            continue
+
 
 # Forward messages to appropriate destinations
 def forward_server_message(message):
@@ -136,7 +152,16 @@ def forward_server_message(message):
     - Check destination server status
     - If dest_server == -1, forward to all except origin_server
     - Otherwise, forward to the specified destination
+    Message format <destination server> <rest of message>
     """
+    dest_server_num = message.split()[0]
+    try:
+        dest_server = socket_info[1][dest_server_num]
+        dest_server.send(f"{message}".encode('utf-8'))
+    except Exception:
+        #Timeout enabled so that will be nonblocking
+        print(f"FAILED FORWARDING MESSAGE: {message}")
+
 
 # Check the status of links and nodes
 def check_status():

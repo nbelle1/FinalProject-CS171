@@ -31,12 +31,14 @@ def connect_server():
     interval = 0.5
     while attempt < max_retries:
         try:
+            #Connect to the Network Server
             networkServer = socket.socket(socket.AF_INET,socket.SOCK_STREAM)  # Create a TCP socket
             networkServer.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             networkServer.connect(('127.0.0.1', NETWORK_SERVER_PORT)) # Connect to the server at localhost on port
+            
             print(f"Connected To Network Server on {NETWORK_SERVER_PORT}")
+            threading.Thread(target=get_server_message).start()
             break
-        #except ConnectionRefusedError:
         except (TimeoutError, ConnectionRefusedError):
             attempt += 1
             if attempt < max_retries:
@@ -45,7 +47,6 @@ def connect_server():
                 print(f"FAILED To Connect to Network Server on {NETWORK_SERVER_PORT}")
                 break
     
-    print("TODO")
 
 def send_server_message(message_type, destination_server, args):
     """
@@ -64,9 +65,41 @@ def get_server_message():
     Based on message type, call the appropriate server function.
     Example: if message_type == "NEW_CONTEXT", call server_new_context().
     """
+    while not stop_event.is_set():
+        try:
+            server_message = networkServer.recv(1024).decode('utf-8') #Receive server response
+            if not server_message:
+                print("Server Disconnected")
+                break
+
+            #Get message Type from Message
+            message_type = message(int(server_message.split()[2]))
+
+            #Start function based on message type
+            if message_type == message.SERVER_INIT:
+                server_init_message(server_message)
+            elif message_type == message.NEW_CONTEXT:
+                server_new_context(server_message)
+            elif message_type == message.CREATE_QUERY:
+                server_create_query(server_message)
+            elif message_type == message.LLM_RESPONSE:
+                server_llm_response(server_message)
+            elif message_type == message.SAVE_ANSWER:
+                server_save_answer(server_message)
+        except Exception:
+            continue
     print("TODO")
 
-def server_new_context():
+def server_init_message(server_message):
+    """
+    Used to asign the server num when connected to the network server
+    """
+    global SERVER_NUM
+    server_num = server_message.split()[3]
+    SERVER_NUM = server_num
+    print(f"Assigned Server Number {SERVER_NUM}")
+
+def server_new_context(server_message):
     """
     Nik
     Create a new context using the keyValue object (kv).
@@ -74,7 +107,7 @@ def server_new_context():
     """
     print("TODO")
 
-def server_create_query():
+def server_create_query(server_message):
     """
     Nik
     Create a query in the specified context.
@@ -84,14 +117,14 @@ def server_create_query():
     """
     print("TODO")
 
-def server_llm_response():
+def server_llm_response(server_message):
     """
     Add the received LLM response to the llm_responses collection.
     Print the response for server-side logging.
     """
     print("TODO")
 
-def server_save_answer():
+def server_save_answer(server_message):
     """
     Save the selected answer to the keyValue storage.
     Call kv.save_answer() to persist the answer.
@@ -222,7 +255,6 @@ def query_gemini():
 if __name__ == "__main__":
     print("Server")
     connect_server()
-    threading.Thread(target=get_server_message).start()
     threading.Thread(target=get_user_input).start()
 
     while not stop_event.is_set():
