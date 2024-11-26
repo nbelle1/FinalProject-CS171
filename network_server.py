@@ -115,22 +115,21 @@ def run_server():
                     print(f"Accepted connection from {addr} as Server {count}")
                     #Sleep to enable server to setup message_handling
                     time.sleep(0.1)
-                    #Send Server Server_Init message with ServerNum
-
                     
-                    json_data = {
+                    #Send Server Server_Init message with ServerNum
+                    message_data = {
                         "dest_server": -1,
                         "sending_server": -1,
                         "message_type": message.SERVER_INIT.value,
-                        "server_num": count
+                        "args": {
+                            "server_num": count
+                        }
                     }
                     
                     # Serialize to JSON
-                    serialized_message = json.dumps(json_data)
+                    serialized_message = json.dumps(message_data)
                     server_socket.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
 
-
-                    #server_socket.send(f"0 0 {message.SERVER_INIT.value} {count}".encode('utf-8'))
                     break
 
             # Create a new thread
@@ -155,7 +154,7 @@ def get_server_message(server):
             if not server_message:
                 print("Server Disconnected")
                 break
-            threading.Thread(target=forward_server_message, args=(server, server_message,)).start()
+            threading.Thread(target=forward_server_message, args=(server_message,)).start()
         except socket.error:
             continue
 
@@ -171,13 +170,31 @@ def forward_server_message(server_message):
     Message format <destination server> <rest of message>
     """
     try:
+        
 
-        message_data = json.loads(server_message.decode('utf-8'))  # Convert bytes to string, then parse JSON
+        #Get Json Datastructure from message
+        message_data = json.loads(server_message)
 
-        dest_server = socket_info[1][message_data["dest_server"]]
-        serialized_message = json.dumps(message_data)
+        #Determine destination server number from message_data
+        dest_server_num = message_data["dest_server"]
+        sending_server = message_data["sending_server"]
+        message_type = message_data["message_type"]
+        
+        print(f"Forwarding From Server {sending_server} to Server {dest_server_num}: {message(message_type)}")
 
-        dest_server.send(f"{serialized_message}".encode('utf-8'))
+        #if server number is -1 send message to all except sender
+        if dest_server_num == -1:
+            for count, soc in enumerate(socket_info[1]):
+                if (soc is not None) and (count != sending_server):
+                    soc.send(server_message.encode('utf-8'))
+
+        #else send to specific server_num
+        else:
+            #Get socket from socket_info and server_num
+            dest_server = socket_info[1][dest_server_num]
+            #Forward message
+            dest_server.send(server_message.encode('utf-8'))
+
     except Exception:
         #Timeout enabled so that will be nonblocking
         print(f"FAILED FORWARDING MESSAGE: {server_message}")

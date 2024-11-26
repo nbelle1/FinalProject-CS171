@@ -19,21 +19,20 @@ NETWORK_SERVER_PORT = 9000
 """
 JSON Format:
 
-message
+message_data
     "dest_server": int
     "sending_server": int 
     "message_type": int
-
-    
-    if SERVER_INIT:
-        "server_num": int
-    if SERVER_KILL:
-    if NEW_CONTEXT:
-    if CREATE_QUERY:
-        "context_id": int
-        "query_string": string
-    if LLM_RESPONSE:
-    if SAVE_ANSWER
+    "args":
+        if SERVER_INIT:
+            "server_num": int
+        if SERVER_KILL:
+        if NEW_CONTEXT:
+        if CREATE_QUERY:
+            "context_id": int
+            "query_string": string
+        if LLM_RESPONSE:
+        if SAVE_ANSWER
 
 
 

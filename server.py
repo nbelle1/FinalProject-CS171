@@ -53,23 +53,27 @@ def connect_server():
                 break
     
 
-def send_server_message(dest_server, json_data):
+def send_server_message(message_type, dest_server, message_args):
     """
     Dakota
     Send a message to the specified server with a given message type and arguments.
     Format message as <destination_server> <SERVER_NUM> <message_type> <args>.
     Use networkServer to send the formatted message.
     """
-    # Convert all elements to strings and join with spaces
-    json_data["dest_server"] = dest_server
-    json_data["sending_server"] = SERVER_NUM
 
-    serialized_message = json.dumps(json_data)
+    #Create uniform message datastructure
+    message_data = {
+        "dest_server": dest_server,
+        "sending_server": SERVER_NUM,
+        "message_type": message_type.value,
+        "args": message_args  # Embed existing message_args here
+    }
+
+
+    #Serialize and send message
+    serialized_message = json.dumps(message_data)
     networkServer.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
 
-
-    # Send networkServer Specific message
-    #networkServer.send(f"{destination_server} {SERVER_NUM} {message_type.value} {args_str} ".encode('utf-8'))
 
 
 def get_server_message():
@@ -91,6 +95,8 @@ def get_server_message():
             message_data = json.loads(server_message)  # Convert bytes to string, then parse JSON
             message_type = message(message_data["message_type"])
 
+            print(f"Received {message_type}")
+
             #Start function based on message type
             if message_type == message.SERVER_INIT:
                 server_init_message(message_data)
@@ -102,8 +108,9 @@ def get_server_message():
                 server_llm_response(message_data)
             elif message_type == message.SAVE_ANSWER:
                 server_save_answer(message_data)
+
         except Exception:
-            print("Fail Getting Server Message")
+            print("Exception Thrown Getting Server Message")
             continue
     print("TODO")
 
@@ -112,7 +119,7 @@ def server_init_message(message_data):
     Used to asign the server num when connected to the network server
     """
     global SERVER_NUM
-    server_num = message_data["server_num"]
+    server_num = message_data["args"]["server_num"]
     SERVER_NUM = server_num
     print(f"Assigned Server Number {SERVER_NUM}")
 
