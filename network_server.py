@@ -141,22 +141,55 @@ def run_server():
             continue
 
 # Handle incoming server messages
+# def get_server_message(server):
+#     """
+#     Dakota
+#     Pseudocode:
+#     - Wait for server messages
+#     - Process messages based on their content
+#     """
+#     while not stop_event.is_set():
+#         try:
+#             server_message = server.recv(1024).decode('utf-8') #Receive server response
+#             if not server_message:
+#                 print("Server Disconnected")
+#                 break
+#             threading.Thread(target=forward_server_message, args=(server_message,)).start()
+#         except socket.error:
+#             continue
+
 def get_server_message(server):
     """
-    Dakota
-    Pseudocode:
-    - Wait for server messages
-    - Process messages based on their content
+    Continuously receive and buffer messages from a server.
+    Ensure fragmented messages are reassembled before processing.
     """
+    buffer = ""  # Buffer to store incomplete messages
+
     while not stop_event.is_set():
         try:
-            server_message = server.recv(1024).decode('utf-8') #Receive server response
-            if not server_message:
+            # Receive data in chunks
+            data = server.recv(1024).decode('utf-8')
+            if not data:
                 print("Server Disconnected")
                 break
-            threading.Thread(target=forward_server_message, args=(server_message,)).start()
+
+            buffer += data  # Append received data to the buffer
+
+            while True:
+                try:
+                    # Attempt to parse a complete JSON object
+                    message_data, end_idx = json.JSONDecoder().raw_decode(buffer)
+                    buffer = buffer[end_idx:].strip()  # Remove processed message from buffer
+
+                    # Process the complete message in a separate thread
+                    threading.Thread(target=forward_server_message, args=(json.dumps(message_data),)).start()
+                except json.JSONDecodeError:
+                    # If parsing fails, wait for more data
+                    break
+
         except socket.error:
             continue
+
 
 
 # Forward messages to appropriate destinations

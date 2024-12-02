@@ -22,7 +22,7 @@ class KeyValue:
             print(f"Context with ID '{context_id}' already exists.")
         else:
             self.data[context_id] = {"queries": [], "responses": {}}
-            print(f"Context '{context_id}' created successfully.")
+            print(f"From Key-Value: Context '{context_id}' created successfully.")
 
     def create_query(self, context_id, query_string):
         """
@@ -37,7 +37,7 @@ class KeyValue:
             return
 
         self.data[context_id]["queries"].append(query_string)
-        print(f"Query added to context '{context_id}': {query_string}")
+        print(f"Key-Value: Query added to context '{context_id}': {query_string}")
 
     def save_answer(self, context_id, response):
         """
@@ -59,7 +59,7 @@ class KeyValue:
         # Associate the response with the latest query
         latest_query = queries[-1]
         self.data[context_id]["responses"][latest_query] = response
-        print(f"Response saved for the latest query '{latest_query}': {response}")
+        print(f"Key Value: Response saved for the latest query '{latest_query}': {response}")
 
     def view(self, context_id):
         """

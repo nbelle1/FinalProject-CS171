@@ -76,46 +76,98 @@ def send_server_message(message_type, dest_server, message_args):
 
 
 
+# def get_server_message():
+#     """
+#     Dakota
+#     Continuously receive messages from other servers or clients.
+#     Parse incoming message to identify message type.
+#     Based on message type, call the appropriate server function.
+#     Example: if message_type == "NEW_CONTEXT", call server_new_context().
+#     """
+#     while not stop_event.is_set():
+#         try:
+#             server_message = networkServer.recv(1024).decode('utf-8') #Receive server response
+#             if not server_message:
+#                 print("Server Disconnected")
+#                 break
+
+#             #Get message Type from Message
+#             message_data = json.loads(server_message)  # Convert bytes to string, then parse JSON
+#             message_type = message(message_data["message_type"])
+
+#             print(f"Received {message_type}")
+
+#             #Start function based on message type
+#             if message_type == message.SERVER_INIT:
+#                 server_init_message(message_data)
+#             elif message_type == message.NEW_CONTEXT:
+#                 server_new_context(message_data)
+#             elif message_type == message.CREATE_QUERY:
+#                 server_create_query(message_data)
+#             elif message_type == message.LLM_RESPONSE:
+#                 server_llm_response(message_data)
+#             elif message_type == message.SAVE_ANSWER:
+#                 server_save_answer(message_data)
+
+#         except Exception:
+#             print("Exception Thrown Getting Server Message")
+#             continue
+#     print("TODO")
+
 def get_server_message():
     """
-    Dakota
     Continuously receive messages from other servers or clients.
-    Parse incoming message to identify message type.
+    Reassemble fragmented messages using a buffer and parse them when complete.
     Based on message type, call the appropriate server function.
     Example: if message_type == "NEW_CONTEXT", call server_new_context().
     """
+    buffer = ""  # Buffer to store partial messages
+
     while not stop_event.is_set():
         try:
-            server_message = networkServer.recv(1024).decode('utf-8') #Receive server response
-            if not server_message:
+            # Receive data from the socket in chunks
+            data = networkServer.recv(1024).decode('utf-8')
+            if not data:
                 print("Server Disconnected")
                 break
 
-            #Get message Type from Message
-            message_data = json.loads(server_message)  # Convert bytes to string, then parse JSON
-            message_type = message(message_data["message_type"])
+            buffer += data  # Append received data to the buffer
 
-            print(f"Received {message_type}")
+            while True:
+                try:
+                    # Attempt to parse a complete JSON object from the buffer
+                    message_data, end_idx = json.JSONDecoder().raw_decode(buffer)
+                    buffer = buffer[end_idx:].strip()  # Remove the processed message from the buffer
 
-            #Start function based on message type
-            if message_type == message.SERVER_INIT:
-                server_init_message(message_data)
-            elif message_type == message.NEW_CONTEXT:
-                server_new_context(message_data)
-            elif message_type == message.CREATE_QUERY:
-                server_create_query(message_data)
-            elif message_type == message.LLM_RESPONSE:
-                server_llm_response(message_data)
-            elif message_type == message.SAVE_ANSWER:
-                server_save_answer(message_data)
+                    # Get message type and process it
+                    message_type = message(message_data["message_type"])
+                    print(f"Received {message_type}")
 
-        except Exception:
-            print("Exception Thrown Getting Server Message")
+                    # Call the appropriate function based on message type
+                    if message_type == message.SERVER_INIT:
+                        server_init_message(message_data)
+                    elif message_type == message.NEW_CONTEXT:
+                        server_new_context(message_data)
+                    elif message_type == message.CREATE_QUERY:
+                        server_create_query(message_data)
+                    elif message_type == message.LLM_RESPONSE:
+                        server_llm_response(message_data)
+                    elif message_type == message.SAVE_ANSWER:
+                        server_save_answer(message_data)
+
+                except json.JSONDecodeError:
+                    # Incomplete JSON message; wait for more data
+                    break
+
+        except Exception as e:
+            print(f"Exception Thrown Getting Server Message: {e}")
             continue
     print("TODO")
 
+
 def server_init_message(message_data):
     """
+    Dakota
     Used to asign the server num when connected to the network server
     """
     global SERVER_NUM
@@ -129,7 +181,20 @@ def server_new_context(message_data):
     Create a new context using the keyValue object (kv).
     Call kv.create_context() to initialize the context.
     """
-    print("TODO")
+    try:
+        # Extract the context ID from the received message data
+        context_id = message_data.get("args", {}).get("context_id")
+
+        if not context_id:
+            print("Error: Context ID is missing in the message data.")
+            return
+
+        # Create the new context using the keyValue object
+        keyValue.create_context(context_id)
+        print(f"Context '{context_id}' created successfully on this server.")
+
+    except Exception as e:
+        print(f"Error occurred while processing NEW_CONTEXT: {e}")
 
 def server_create_query(message_data):
     """
@@ -139,7 +204,42 @@ def server_create_query(message_data):
     Generate a response by calling query_gemini().
     Send response back to the calling server using send_server_message().
     """
-    print("TODO")
+    try:
+        # Extract context ID and query string from the message data
+        args = message_data.get("args", {})
+        context_id = args.get("context_id")
+        query_string = args.get("query_string")
+        sending_server = message_data.get("sending_server")
+
+        if not context_id or not query_string:
+            print("Error: Context ID or query string missing in message.")
+            return
+
+        # Step 1: Add the query to the specified context
+        keyValue.create_query(context_id, query_string)
+        print(f"Server: Query added to context '{context_id}': {query_string}")
+
+        # Step 2: Retrieve the context as a string
+        context_string = keyValue.view(context_id)
+        if not context_string:
+            print(f"Error: Context '{context_id}' not found.")
+            return
+
+        # Step 3: Generate a response by querying Gemini
+        prompt_answer = "Answer: "
+        response = query_gemini(context_string + "\n" + prompt_answer)
+        print(f"Server: Generated response for context '{context_id}': {response}")
+
+        # Step 4: Send the response back to the calling server
+        response_message = {
+            "context_id": context_id,
+            "query_string": query_string,
+            "response": response
+        }
+        send_server_message(message.LLM_RESPONSE, sending_server, response_message)
+
+    except Exception as e:
+        print(f"Error occurred while processing CREATE_QUERY: {e}")
 
 def server_llm_response(message_data):
     """
@@ -200,13 +300,19 @@ def user_new_context(user_message):
         return
 
     # Step 1: Get consensus from all servers
-    consensus = get_consensus()
-    if not consensus:
-        print("Consensus failed. Unable to create new context.")
-        return
+    # consensus = get_consensus()
+    # if not consensus:
+    #     print("Consensus failed. Unable to create new context.")
+    #     return
 
     # Step 2: Send NEW_CONTEXT message to all servers (MODIFY TO SEND JSON)
-    send_server_message(message.NEW_CONTEXT, -1, context_id)
+    # Structure the message arguments as JSON
+    message_args = {
+        "context_id": context_id
+    }
+
+    # Send the message using send_server_message
+    send_server_message(message.NEW_CONTEXT, -1, message_args)
 
     # Step 3: Create context locally
     keyValue.create_context(context_id)
@@ -223,25 +329,30 @@ def user_create_query(user_message):
     Print the response for user.
     """
     # Extract context ID and query string from the user message
-    parts = user_message.replace("query", "").strip().split(":", 1)
-    if len(parts) != 2:
-        print("Error: Invalid input format. Use 'query <context_id>:<query_string>'")
+    parts = user_message.split(" ", 2)  # Split into 'query', '<context_id>', and '<query_string>'
+    if len(parts) != 3 or parts[0] != "query":
+        print("Error: Invalid input format. Use 'query <context_id> <query_string>'")
         return
 
-    context_id, query_string = parts[0].strip(), parts[1].strip()
+    context_id, query_string = parts[1].strip(), parts[2].strip()
+
 
     if not context_id or not query_string:
         print("Error: Context ID and query cannot be empty.")
         return
 
     # Step 1: Get consensus from all servers
-    consensus = get_consensus()
-    if not consensus:
-        print("Consensus failed. Unable to create new query.")
-        return
+    # consensus = get_consensus()
+    # if not consensus:
+    #     print("Consensus failed. Unable to create new query.")
+    #     return
 
     # Step 2: Send CREATE_QUERY message to all servers (MODIFY TO SEND JSON)
-    send_server_message(message.CREATE_QUERY, -1, f"{context_id}:{query_string}")
+    message_args = {
+        "context_id": context_id,
+        "query_string": query_string
+    }
+    send_server_message(message.CREATE_QUERY, -1, message_args)
 
     # Step 3: Create query locally
     keyValue.create_query(context_id, query_string)
