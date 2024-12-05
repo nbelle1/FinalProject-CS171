@@ -5,7 +5,6 @@ import time
 import socket
 import json
 from shared import message, NETWORK_SERVER_PORT
-from key_value import KeyValue
 import threading
 
 
@@ -13,6 +12,8 @@ import threading
 # Global Variables
 global server_running
 stop_event = threading.Event()
+
+#TODO: Place in forwarding lock around print and soc.sending portion for thread-safety
 
 
 socket_info = [
@@ -202,6 +203,8 @@ def forward_server_message(server_message):
     - Otherwise, forward to the specified destination
     Message format <destination server> <rest of message>
     """
+    #Required Interval Between Message Passing
+    time.sleep(3)
     try:
         
 

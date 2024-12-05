@@ -6,17 +6,31 @@ import sys
 import threading
 import os
 import json
-from dotenv import load_dotenv
 import google.generativeai as genai
-from shared import message, NETWORK_SERVER_PORT
+from dotenv import load_dotenv
+from queue import Queue
+from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM
+
 from key_value import KeyValue
 
 
 keyValue = KeyValue()
 networkServer = None
 stop_event = threading.Event()
-
 SERVER_NUM = -1
+
+# Consensus Variables
+leader = -1
+ballot_number = {
+    'seq_num': 0,
+    'pid': -1,
+    'op_num': 0
+}
+pending_operations = Queue()
+num_leader_promises = 0
+num_consensus_accepted = 0
+
+
 
 
 # ------  SERVER  ------
@@ -53,7 +67,7 @@ def connect_server():
                 break
     
 
-def send_server_message(message_type, dest_server, message_args):
+def send_server_message(message_type, dest_server, message_args=None):
     """
     Dakota
     Send a message to the specified server with a given message type and arguments.
@@ -66,53 +80,16 @@ def send_server_message(message_type, dest_server, message_args):
         "dest_server": dest_server,
         "sending_server": SERVER_NUM,
         "message_type": message_type.value,
-        "args": message_args  # Embed existing message_args here
+        "args": message_args or {}  # Embed existing message_args here
     }
-
 
     #Serialize and send message
     serialized_message = json.dumps(message_data)
     networkServer.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
+    
+    print(f"Sent {message_type} to server {dest_server}")
 
 
-
-# def get_server_message():
-#     """
-#     Dakota
-#     Continuously receive messages from other servers or clients.
-#     Parse incoming message to identify message type.
-#     Based on message type, call the appropriate server function.
-#     Example: if message_type == "NEW_CONTEXT", call server_new_context().
-#     """
-#     while not stop_event.is_set():
-#         try:
-#             server_message = networkServer.recv(1024).decode('utf-8') #Receive server response
-#             if not server_message:
-#                 print("Server Disconnected")
-#                 break
-
-#             #Get message Type from Message
-#             message_data = json.loads(server_message)  # Convert bytes to string, then parse JSON
-#             message_type = message(message_data["message_type"])
-
-#             print(f"Received {message_type}")
-
-#             #Start function based on message type
-#             if message_type == message.SERVER_INIT:
-#                 server_init_message(message_data)
-#             elif message_type == message.NEW_CONTEXT:
-#                 server_new_context(message_data)
-#             elif message_type == message.CREATE_QUERY:
-#                 server_create_query(message_data)
-#             elif message_type == message.LLM_RESPONSE:
-#                 server_llm_response(message_data)
-#             elif message_type == message.SAVE_ANSWER:
-#                 server_save_answer(message_data)
-
-#         except Exception:
-#             print("Exception Thrown Getting Server Message")
-#             continue
-#     print("TODO")
 
 def get_server_message():
     """
@@ -146,15 +123,28 @@ def get_server_message():
                     # Call the appropriate function based on message type
                     if message_type == message.SERVER_INIT:
                         server_init_message(message_data)
-                    elif message_type == message.NEW_CONTEXT:
-                        server_new_context(message_data)
-                    elif message_type == message.CREATE_QUERY:
-                        server_create_query(message_data)
+                    #elif message_type == message.NEW_CONTEXT:
+                    #    server_new_context(message_data)
+                    #elif message_type == message.CREATE_QUERY:
+                    #    server_create_query(message_data)
+                    elif message_type == message.LEADER_PREPARE:
+                        server_leader_prepare_message(message_data)
+                    elif message_type == message. LEADER_PROMISE:
+                        server_leader_promise_message()
+                    elif message_type == message.LEADER_ACCEPT:
+                        server_leader_accept_message(message_data)
+                    elif message_type == message.CONSENSUS_PROPOSE:
+                        server_consensus_propose_message(message_data)
+                    elif message_type == message.CONSENSUS_ACCEPT:
+                        server_consensus_accept_message(message_data)
+                    elif message_type == message.CONSENSUS_ACCEPTED:
+                        server_consensus_accepted_message()
+                    elif message_type == message.CONSENSUS_DECIDE:
+                        server_consensus_decide_message(message_data)
                     elif message_type == message.LLM_RESPONSE:
                         server_llm_response(message_data)
                     elif message_type == message.SAVE_ANSWER:
                         server_save_answer(message_data)
-
                 except json.JSONDecodeError:
                     # Incomplete JSON message; wait for more data
                     break
@@ -173,9 +163,11 @@ def server_init_message(message_data):
     global SERVER_NUM
     server_num = message_data["args"]["server_num"]
     SERVER_NUM = server_num
+    ballot_number["pid"] = server_num
+
     print(f"Assigned Server Number {SERVER_NUM}")
 
-def server_new_context(message_data):
+def server_new_context(user_message):
     """
     Nik
     Create a new context using the keyValue object (kv).
@@ -183,10 +175,10 @@ def server_new_context(message_data):
     """
     try:
         # Extract the context ID from the received message data
-        context_id = message_data.get("args", {}).get("context_id")
+        context_id = user_message.replace("create", "").strip()
 
         if not context_id:
-            print("Error: Context ID is missing in the message data.")
+            print("Error Getting Context_id")
             return
 
         # Create the new context using the keyValue object
@@ -207,14 +199,20 @@ def server_create_query(message_data):
     try:
         # Extract context ID and query string from the message data
         args = message_data.get("args", {})
-        context_id = args.get("context_id")
-        query_string = args.get("query_string")
-        sending_server = message_data.get("sending_server")
+        user_message = args.get("user_message")
+        request_server = args.get("request_server")
 
-        if not context_id or not query_string:
-            print("Error: Context ID or query string missing in message.")
+        parts = user_message.split(" ", 2)  # Split into 'query', '<context_id>', and '<query_string>'
+        if len(parts) != 3 or parts[0] != "query":
+            print("Error: Invalid input format. Use 'query <context_id> <query_string>'")
             return
 
+        context_id, query_string = parts[1].strip(), parts[2].strip()
+
+        if not context_id or not query_string:
+            print("Error: Context ID and query cannot be empty.")
+            return
+        
         # Step 1: Add the query to the specified context
         keyValue.create_query(context_id, query_string)
         print(f"Server: Query added to context '{context_id}': {query_string}")
@@ -236,7 +234,11 @@ def server_create_query(message_data):
             "query_string": query_string,
             "response": response
         }
-        send_server_message(message.LLM_RESPONSE, sending_server, response_message)
+        
+        if request_server == SERVER_NUM:
+            print(response)
+        else:
+            send_server_message(message.LLM_RESPONSE, request_server, response_message)
 
     except Exception as e:
         print(f"Error occurred while processing CREATE_QUERY: {e}")
@@ -246,7 +248,9 @@ def server_llm_response(message_data):
     Add the received LLM response to the llm_responses collection.
     Print the response for server-side logging.
     """
-    print("TODO")
+    args = message_data.get("args", {})
+    response = args.get("response")
+    print(response)
 
 def server_save_answer(message_data):
     """
@@ -278,7 +282,7 @@ def get_user_input():
         elif user_input.startswith("choose"):
             user_select_answer(user_input)
         elif user_input.startswith("viewall"):
-            user_view_all_context(user_input)
+            user_view_all_context()
         elif user_input.startswith("view"):
             user_view_context(user_input)
         else:
@@ -300,23 +304,23 @@ def user_new_context(user_message):
         return
 
     # Step 1: Get consensus from all servers
-    # consensus = get_consensus()
+    get_consensus(user_message)
     # if not consensus:
     #     print("Consensus failed. Unable to create new context.")
     #     return
 
     # Step 2: Send NEW_CONTEXT message to all servers (MODIFY TO SEND JSON)
     # Structure the message arguments as JSON
-    message_args = {
-        "context_id": context_id
-    }
+    #message_args = {
+    #    "context_id": context_id
+    #}
 
     # Send the message using send_server_message
-    send_server_message(message.NEW_CONTEXT, -1, message_args)
+    #send_server_message(message.NEW_CONTEXT, -1, message_args)
 
     # Step 3: Create context locally
-    keyValue.create_context(context_id)
-    print(f"New context '{context_id}' created successfully.")
+    #keyValue.create_context(context_id)
+    #print(f"New context '{context_id}' created successfully.")
 
 def user_create_query(user_message):
     """
@@ -342,36 +346,36 @@ def user_create_query(user_message):
         return
 
     # Step 1: Get consensus from all servers
-    # consensus = get_consensus()
+    get_consensus(user_message)
     # if not consensus:
     #     print("Consensus failed. Unable to create new query.")
     #     return
 
     # Step 2: Send CREATE_QUERY message to all servers (MODIFY TO SEND JSON)
-    message_args = {
-        "context_id": context_id,
-        "query_string": query_string
-    }
-    send_server_message(message.CREATE_QUERY, -1, message_args)
+    #message_args = {
+    #    "context_id": context_id,
+    #     "query_string": query_string
+    # }
+    # send_server_message(message.CREATE_QUERY, -1, message_args)
 
-    # Step 3: Create query locally
-    keyValue.create_query(context_id, query_string)
+    # # Step 3: Create query locally
+    # keyValue.create_query(context_id, query_string)
 
-    # Step 4: Retrieve the context as a string
-    context_string = keyValue.view(context_id)
-    if not context_string:
-        print(f"Error: Context '{context_id}' not found.")
-        return
+    # # Step 4: Retrieve the context as a string
+    # context_string = keyValue.view(context_id)
+    # if not context_string:
+    #     print(f"Error: Context '{context_id}' not found.")
+    #     return
 
-    # Step 5: Query Gemini
-    prompt_answer = "Answer: "
-    response = query_gemini(context_string + "\n" + prompt_answer)
+    # # Step 5: Query Gemini
+    # prompt_answer = "Answer: "
+    # response = query_gemini(context_string + "\n" + prompt_answer)
 
-    # Step 6: Add the response to local KeyValue storage
-    keyValue.save_answer(context_id, response)
+    # # Step 6: Add the response to local KeyValue storage
+    # keyValue.save_answer(context_id, response)
 
-    # Step 7: Print the response
-    print(f"LLM Response: {response}")
+    # # Step 7: Print the response
+    # print(f"LLM Response: {response}")
 
 def user_select_answer(user_message):
     """
@@ -401,7 +405,7 @@ def user_view_context(user_message):
     # Print the formatted context data with quotation marks and context ID
     print(f"{context_id} = \"\"\"\n{context_data}\n\"\"\"")
 
-def user_view_all_context(user_message):
+def user_view_all_context():
     """
     Retrieve and display all contexts.
     Use keyValue.view_all() to list all contexts.
@@ -423,14 +427,162 @@ def user_view_all_context(user_message):
     print("\n".join(formatted_output))
 
 # ------  CONSENSUS  ------
-def get_consensus():
+    # --- Election Phase ---
+def leader_init():
+    
+    print("Leader init")
+    if leader == -1:
+        start_leader_election()
+
+def start_leader_election():
+
+    print("Starting Election")
+    global num_leader_promises, ballot_number, leader
+    
+    num_leader_promises = 0
+    ballot_number["seq_num"] += 1
+    message_args = {
+        "ballot_number": ballot_number,
+    }
+    send_server_message(message.LEADER_PREPARE, -1, message_args)
+    while num_leader_promises < MAX_SERVER_NUM - 1:
+        time.sleep(0.1)
+        #TODO: TIMOUT FOR FAILURE
+    send_server_message(message.LEADER_ACCEPT, -1)
+    leader = SERVER_NUM
+    threading.Thread(target=run_leader).start()
+
+def server_leader_prepare_message(message_data):
+
+    # Extract context ID and query string from the message data
+    args = message_data.get("args", {})
+    ballot = args.get("ballot_number")
+    sending_server = message_data.get("sending_server")
+
+    #Return Promise if message seq_num greater than local seq_num, and set local seq_num to new value
+    if ballot["seq_num"] > ballot_number["seq_num"]:
+        send_server_message(message.LEADER_PROMISE, sending_server)
+        ballot_number["seq_num"] = ballot["seq_num"]
+        
+
+
+def server_leader_promise_message():
+
+    global num_leader_promises
+    num_leader_promises += 1
+
+
+def server_leader_accept_message(message_data):
+
+    global leader
+    leader = message_data.get("sending_server")
+
+    # --- Decision Phase ---
+def insert_operation_to_queue(user_message, ballot):
+
+    #Insert message and ballot to queue
+    pending_operations.put((user_message, ballot))
+
+def get_consensus(user_message):
     """
     Implement a method to achieve consensus among servers.
     Communicate with all servers to confirm action or context creation.
     Return consensus result to calling function.
     """
-    print("TODO")
+    leader_init()
 
+    #TODO: Increment local ballot_number (Right Spot?)
+    ballot_number["op_num"] += 1
+
+    #If leader add operation to operation queue
+    if leader == SERVER_NUM:
+        insert_operation_to_queue(user_message, ballot_number)
+    #If not send message to leader to do so
+    else:
+        message_args = {
+            "user_message": user_message,
+            "ballot_number": ballot_number,
+        }
+        send_server_message(message.CONSENSUS_PROPOSE, leader, message_args)
+
+def run_leader():
+
+    global num_consensus_accepted
+
+    while not stop_event.is_set():
+        if not pending_operations.empty():
+            #Pop the next operation
+            user_message, ballot = pending_operations.get()
+            accept_message_args = {
+                "ballot_number": ballot,
+            }
+            #Send Accept? message to all servers with message
+            num_consensus_accepted = 0
+            send_server_message(message.CONSENSUS_ACCEPT, -1, accept_message_args)
+
+            #Wait for all servers to respond
+            while num_consensus_accepted < MAX_SERVER_NUM - 1:
+                time.sleep(0.1)
+                #TODO: TIMOUT FOR FAILURE
+
+            #TODO Maybe: Remove from pending operations now??
+
+            #TODO: Op num increment moved to before insertion
+
+            #Broadcast consensus decide
+            decide_message_args = {
+                "user_message": user_message,
+                "request_server": ballot["pid"]
+            }
+            send_server_message(message.CONSENSUS_DECIDE, -1, decide_message_args)
+            
+            #Do Operation Locally (mimic message with minium pieces needed)
+            local_decide_message = {
+                "sending_server": SERVER_NUM,
+                "args": decide_message_args,
+            }
+            server_consensus_decide_message(local_decide_message)
+
+
+def server_consensus_propose_message(message_data):
+        
+    args = message_data.get("args", {})
+    user_message = args.get("user_message")
+    ballot = args.get("ballot_number")
+
+    insert_operation_to_queue(user_message, ballot)
+
+def server_consensus_accepted_message():
+
+    global num_consensus_accepted
+    num_consensus_accepted += 1
+
+def server_consensus_accept_message(message_data):
+
+    args = message_data.get("args", {})
+    ballot = args.get("ballot_number")
+    sending_server = message_data.get("sending_server")
+
+    if ballot["op_num"] >= ballot_number["op_num"]:
+        send_server_message(message.CONSENSUS_ACCEPTED, sending_server)
+        #TODO: Might have to clarify what ballot talking about
+    else:
+        print(f"Consensus Rejected: incoming ballot op_num {ballot["op_num"]} < server ballot op_num {ballot_number["op_num"]}")
+
+
+def server_consensus_decide_message(message_data):
+
+    args = message_data.get("args", {})
+    user_message = args.get("user_message")
+    if user_message.startswith("create"):
+        server_new_context(user_message)
+    elif user_message.startswith("query"):
+        server_create_query(message_data)
+    else:
+        print(f"UNSUPPORTED SERVER CONSENSUS DECIDE MESSAGE: {user_message}")
+
+
+# ------ GEMINI ------
 
 def setup_gemini():
     # Load environment variables from .env file
@@ -440,7 +592,6 @@ def setup_gemini():
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 
-# ------ GEMINI ------
 def query_gemini(context, prompt_answer="Answer: "):
     """
     Query the Gemini LLM with a given context and prompt.

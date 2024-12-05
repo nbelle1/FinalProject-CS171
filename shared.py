@@ -8,13 +8,22 @@ class message(Enum):
     """
     SERVER_INIT = 1
     SERVER_KILL = 2
-    NEW_CONTEXT = 3
-    CREATE_QUERY = 4
-    LLM_RESPONSE = 5
-    SAVE_ANSWER = 6
+    
+    LEADER_PREPARE = 3
+    LEADER_PROMISE = 4
+    LEADER_ACCEPT = 5
+
+    CONSENSUS_PROPOSE = 6
+    CONSENSUS_ACCEPT = 7
+    CONSENSUS_ACCEPTED = 8
+    CONSENSUS_DECIDE = 9
+
+    LLM_RESPONSE = 10
+    SAVE_ANSWER = 11
+
 
 NETWORK_SERVER_PORT = 9000
-
+MAX_SERVER_NUM = 3
 
 """
 JSON Format:
@@ -27,13 +36,24 @@ message_data
         if SERVER_INIT:
             "server_num": int
         if SERVER_KILL:
-        if NEW_CONTEXT:
-        if CREATE_QUERY:
+        if LEADER_PREPARE:
+            "ballot_number": dictionary
+        if LEADER_PROMISE:
+        if LEADER_ACCEPT:
+
+        if CONSENSUS_PROPOSE:
+            "user_message": string
+            "ballot_message":string
+        if CONSENSUS_ACCEPT:
+            "ballot_number": dictionary
+        if CONSENSUS_ACCEPTED:
+        if CONSENSUS_DECIDE:
+            "user_message": string
+        if LLM_RESPONSE:
             "context_id": int
             "query_string": string
-        if LLM_RESPONSE:
-        if SAVE_ANSWER
-
+            "response": string
+            "request_server": int   //Original server that made the response
 
 
 
