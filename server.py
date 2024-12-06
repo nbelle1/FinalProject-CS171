@@ -145,6 +145,8 @@ def get_server_message():
                         server_llm_response(message_data)
                     elif message_type == message.SAVE_ANSWER:
                         server_save_answer(message_data)
+                    elif message_type == message.UPDATE_CONTEXT:
+                        server_update_context(message_data)
                 except json.JSONDecodeError:
                     # Incomplete JSON message; wait for more data
                     break
@@ -449,7 +451,8 @@ def start_leader_election():
     while num_leader_promises < MAX_SERVER_NUM - 1:
         time.sleep(0.1)
         #TODO: TIMOUT FOR FAILURE
-    send_server_message(message.LEADER_ACCEPT, -1)
+
+    # send_server_message(message.LEADER_ACCEPT, -1)
     leader = SERVER_NUM
     threading.Thread(target=run_leader).start()
 
@@ -460,11 +463,42 @@ def server_leader_prepare_message(message_data):
     ballot = args.get("ballot_number")
     sending_server = message_data.get("sending_server")
 
-    #Return Promise if message seq_num greater than local seq_num, and set local seq_num to new value
-    if ballot["seq_num"] > ballot_number["seq_num"]:
-        send_server_message(message.LEADER_PROMISE, sending_server)
-        ballot_number["seq_num"] = ballot["seq_num"]
-        
+    # Return Promise if message seq_num greater than local seq_num, and set local seq_num to new value
+    if ballot["seq_num"] > ballot_number["seq_num"] or ballot["pid"] > ballot_number["pid"]:
+        # If proposer's op_num is lower, send update their context will up-to-date operations
+        if ballot["op_num"] < ballot_number["op_num"]:
+            message_args = {
+                # TODO: Is KeyValue the best way to send all of the context?
+                "context": keyValue,
+                "op_num": ballot_number["op_num"]
+            }
+            send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
+            ballot_number["seq_num"] = ballot["seq_num"]
+        # Send a promise to proposer otherwise
+        else:
+            send_server_message(message.LEADER_PROMISE, sending_server)
+            ballot_number["seq_num"] = ballot["seq_num"]
+
+
+      
+def server_update_context(message_data):
+    """
+    Function called when a server trying to be leader recieves
+    UPDATE_CONTEXT because their op_num is lagging behind.
+    Replaces its key-value with the sending server's and updates
+    op_num.
+    """
+    global keyValue
+    global ballot_number
+    args = message_data.get("args", {})
+
+    # Update context and op_num
+    keyValue = args.get("context")
+    ballot_number["op_num"] = args.get("op_num")
+
+    # Restart leader election 
+    #TODO: maybe call leader_init instead??
+    start_leader_election()
 
 
 def server_leader_promise_message():
@@ -473,6 +507,7 @@ def server_leader_promise_message():
     num_leader_promises += 1
 
 
+# TODO: Delete later, currently unused
 def server_leader_accept_message(message_data):
 
     global leader
@@ -491,9 +526,6 @@ def get_consensus(user_message):
     Return consensus result to calling function.
     """
     leader_init()
-
-    #TODO: Increment local ballot_number (Right Spot?)
-    ballot_number["op_num"] += 1
 
     #If leader add operation to operation queue
     if leader == SERVER_NUM:
@@ -572,6 +604,9 @@ def server_consensus_accept_message(message_data):
 
 
 def server_consensus_decide_message(message_data):
+    
+    #Increment local ballot_number
+    ballot_number["op_num"] += 1
 
     args = message_data.get("args", {})
     user_message = args.get("user_message")

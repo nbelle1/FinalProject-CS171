@@ -21,6 +21,9 @@ class message(Enum):
     LLM_RESPONSE = 10
     SAVE_ANSWER = 11
 
+    # Used to update context and op_num
+    UPDATE_CONTEXT = 12
+
 
 NETWORK_SERVER_PORT = 9000
 MAX_SERVER_NUM = 3
@@ -54,6 +57,9 @@ message_data
             "query_string": string
             "response": string
             "request_server": int   //Original server that made the response
+        if UPDATE_CONTEXT:
+            "context": KeyValue
+            "op_num": int
 
 
 
