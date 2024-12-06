@@ -236,7 +236,8 @@ def server_create_query(message_data):
         }
         
         if request_server == SERVER_NUM:
-            print(response)
+            # print(response)
+            pass
         else:
             send_server_message(message.LLM_RESPONSE, request_server, response_message)
 
@@ -399,7 +400,7 @@ def user_view_context(user_message):
     context_data = keyValue.view(context_id)  # Call the KeyValue store's view method
 
     if not context_data:
-        print(f"Context '{context_id}' not found.")
+        print(f"Context '{context_id}' not found or context is empty.")
         return
 
     # Print the formatted context data with quotation marks and context ID
