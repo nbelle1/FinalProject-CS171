@@ -19,10 +19,10 @@ class KeyValue:
             context_id (str): A unique identifier for the context.
         """
         if context_id in self.data:
-            print(f"Context with ID '{context_id}' already exists.")
+            print(f"DEBUG: Key-Value: Context with ID '{context_id}' already exists.")
         else:
             self.data[context_id] = {"queries": [], "responses": {}}
-            print(f"From Key-Value: Context '{context_id}' created successfully.")
+            # print(f"DEBUG: Key-Value: Context '{context_id}' created successfully.")
 
     def create_query(self, context_id, query_string):
         """
@@ -37,7 +37,7 @@ class KeyValue:
             return
 
         self.data[context_id]["queries"].append(query_string)
-        print(f"Key-Value: Query added to context '{context_id}': {query_string}")
+        # print(f"DEBUG: Key-Value: Query added to context '{context_id}': {query_string}")
 
     def save_answer(self, context_id, response):
         """
@@ -107,3 +107,4 @@ class KeyValue:
                 for query in queries
             ]
         return result
+

@@ -231,9 +231,10 @@ def forward_server_message(server_message):
             #Forward message
             dest_server.send(server_message.encode('utf-8'))
 
-    except Exception:
-        #Timeout enabled so that will be nonblocking
+    except Exception as e:
+        # Print the error along with the message that caused it
         print(f"FAILED FORWARDING MESSAGE: {server_message}")
+        print(f"ERROR: {e}")
 
 
 # Check the status of links and nodes
