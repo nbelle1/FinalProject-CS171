@@ -4,7 +4,7 @@ import sys
 import time
 import socket
 import json
-from shared import message, NETWORK_SERVER_PORT
+from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM
 import threading
 
 
@@ -12,18 +12,19 @@ import threading
 # Global Variables
 global server_running
 stop_event = threading.Event()
+lock = threading.Lock()
 
 #TODO: Place in forwarding lock around print and soc.sending portion for thread-safety
 
 
 socket_info = [
-    [1, 2, 3],  # Socket numbers
     [None, None, None],  # Sockets (initially null)
-    [  # Link status (tuple for each connection)
-        [(2, 1), (3, 1)],  # Links for socket 1 (server, status)
-        [(1, 1), (3, 1)],  # Links for socket 2 (server, status)
-        [(1, 1), (2, 1)],  # Links for socket 3 (server, status)
-    ]
+    [
+        #Link status [Sending][Receiving]
+        [1, 1, 1],  # Status of links from server 1
+        [1, 1, 1],  # Status of links from server 2
+        [1, 1, 1],  # Status of links from server 3
+    ]   
 ]
 
 # Setup socket information data structure
@@ -45,7 +46,7 @@ def get_user_input():
         user_input = input() # Input message from the user
         if user_input.lower() == 'exit':
             stop_event.set()
-            for soc in socket_info[1]:
+            for soc in socket_info[0]:
                 if soc != None:
                     soc.close()
             break
@@ -55,6 +56,8 @@ def get_user_input():
             fix_link(user_input)
         elif user_input.startswith("failNode"):
             fail_node(user_input)
+        elif user_input.startswith("status"):
+            print_socket_status()
         else:
             print(f"UNCRECOGNIZED INPUT {user_input}")
 
@@ -62,29 +65,95 @@ def get_user_input():
 def fail_link(user_message):
     """
     Pseudocode:
-    - Find the tuple for src and dest in socket_info[2]
+    - Find the tuple for src and dest in socket_info[1]
     - Set the link status to 0 for both directions
     """
-    print("TODO")
+    valid, result = decode_link_user_message(user_message)
+    if not valid:
+        print(f"Error: {result}")
+        return
+    
+    #Set Link To False
+    socket_info[1][result[0]][result[1]] = 0
+    print(f"Failed Link src={result[0]}, dest={result[1]}")
 
 # Fix a link between two servers
 def fix_link(user_message):
     """
     Pseudocode:
-    - Find the tuple for src and dest in socket_info[2]
+    - Find the tuple for src and dest in socket_info[1]
     - Set the link status to 1 for both directions
     """
-    print("TODO")
+    valid, result = decode_link_user_message(user_message)
+    if not valid:
+        print(f"Error: {result}")
+        return
+    
+    #Set Link To True
+    socket_info[1][result[0]][result[1]] = 1
+    print(f"Fixed Link src={result[0]}, dest={result[1]}")
+
+def print_socket_status():
+    print("Sockets:")
+    # Print socket information
+    for i, soc in enumerate(socket_info[0], start=1):
+        status = "None" if soc is None else str(soc)
+        print(f"  Socket {i-1}: {status}")
+    
+    print("\nLink Status Matrix:")
+    # Print the link status matrix
+    matrix = socket_info[1]
+    print("    " + " ".join(f"S{i}" for i in range(len(matrix))))  # Header row
+    for i, row in enumerate(matrix):
+        row_status = "  ".join(str(status) for status in row)
+        print(f"S{i}: {row_status}")
+
+
+def decode_link_user_message(user_message):
+    """
+    Helper message to deconde link
+    """
+    # Split the message into parts
+    parts = user_message.split()
+    
+    # Validate message format
+    if len(parts) != 3:
+        return False, "Invalid message format. Use: failLink <src> <dest>"
+    
+    try:
+        # Parse src and dest as integers
+        src = int(parts[1])
+        dest = int(parts[2])
+    except ValueError:
+        return False, "Source and destination must be integers."
+    
+    # Validate src and dest
+    if src == dest:
+        return False, "Source and destination cannot be the same."
+    if not (0 <= src <= MAX_SERVER_NUM and 0 <= dest <= MAX_SERVER_NUM):
+        return False, f"Source and destination must be between 0 and {MAX_SERVER_NUM}."
+    
+    return True, (src, dest)
+    
 
 # Fail a node
 def fail_node(user_message):
     """
     Pseudocode:
-    - Set socket associated with node_num to None in socket_info[1]
-    - Set all links to/from the node to 0 (inactive) in socket_info[2]
+    - Set socket associated with node_num to None in socket_info[0]
+    - Set all links to/from the node to 0 (inactive) in socket_info[1]
     """
-    print("TODO")
+    _, dest_server = user_message.split()
 
+    message_data = {
+        "dest_server": int(dest_server),
+        "sending_server": -1,
+        "message_type": message.SERVER_KILL.value,
+    }
+    
+    server_message = json.dumps(message_data)
+    forward_server_message(server_message)
+    
 # Start the server and listen for connections
 def run_server():
     """
@@ -109,10 +178,10 @@ def run_server():
             server_socket, addr = server.accept() # Accept client connections
 
             #Add connected socket to first available socket in socket_info
-            for count, soc in enumerate(socket_info[1]):
+            for count, soc in enumerate(socket_info[0]):
                 if soc is None:
                     # Add socket to socket_info at the correct index
-                    socket_info[1][count] = server_socket
+                    socket_info[0][count] = server_socket
                     print(f"Accepted connection from {addr} as Server {count}")
                     #Sleep to enable server to setup message_handling
                     time.sleep(0.1)
@@ -171,9 +240,8 @@ def get_server_message(server):
             # Receive data in chunks
             data = server.recv(1024).decode('utf-8')
             if not data:
-                print("Server Disconnected")
-                break
-
+                raise socket.error()
+            
             buffer += data  # Append received data to the buffer
 
             while True:
@@ -189,7 +257,9 @@ def get_server_message(server):
                     break
 
         except socket.error:
-            continue
+            print("Server Disconnected")
+            break
+            #continue
 
 
 
@@ -206,36 +276,55 @@ def forward_server_message(server_message):
     #Required Interval Between Message Passing
     time.sleep(3)
     try:
-        
+        #Lock to protect prints and sending messages
+        with lock:
+            #Get Json Datastructure from message
+            message_data = json.loads(server_message)
 
-        #Get Json Datastructure from message
-        message_data = json.loads(server_message)
+            #Determine destination server number from message_data
+            dest_server_num = message_data["dest_server"]
+            sending_server = message_data["sending_server"]
+            message_type = message_data["message_type"]
+            
+            #if server number is -1 send message to all except sender
+            if dest_server_num == -1:
+                for count, soc in enumerate(socket_info[0]):
+                    if count != sending_server and check_forward_connection(soc, sending_server, count, message_type):
+                        soc.send(server_message.encode('utf-8'))
+                
+            #else send to specific server_num
+            else:
+                #Get socket from socket_info and server_num
+                dest_server = socket_info[0][dest_server_num]
+                if check_forward_connection(dest_server, sending_server, dest_server_num, message_type):
+                    dest_server.send(server_message.encode('utf-8'))
 
-        #Determine destination server number from message_data
-        dest_server_num = message_data["dest_server"]
-        sending_server = message_data["sending_server"]
-        message_type = message_data["message_type"]
-        
-        print(f"Forwarding From Server {sending_server} to Server {dest_server_num}: {message(message_type)}")
+            #If sending Kill message close connection to server
+            if message_type is message.SERVER_KILL.value:
+                #print(f"Failed Node {dest_server_num}")
+                socket_info[0][dest_server_num].close()
+                socket_info[0][dest_server_num] = None
 
-        #if server number is -1 send message to all except sender
-        if dest_server_num == -1:
-            for count, soc in enumerate(socket_info[1]):
-                if (soc is not None) and (count != sending_server):
-                    soc.send(server_message.encode('utf-8'))
-
-        #else send to specific server_num
-        else:
-            #Get socket from socket_info and server_num
-            dest_server = socket_info[1][dest_server_num]
-            #Forward message
-            dest_server.send(server_message.encode('utf-8'))
 
     except Exception as e:
         # Print the error along with the message that caused it
         print(f"FAILED FORWARDING MESSAGE: {server_message}")
         print(f"ERROR: {e}")
 
+def check_forward_connection(dest_soc, src, dest, message_type):
+    if dest_soc is None:
+        print(f"Broken Node {src} to {dest} for {message(message_type)}")
+        return False
+    #Check if Link is down
+    elif socket_info[1][src][dest] == 0:
+        print(f"Broken Link {src} to {dest} for {message(message_type)}")
+        return False
+    #Forward Message
+    else:
+        print(f"Forwarding From Server {src} to Server {dest}: {message(message_type)}")
+        #print(f"Forwarding From Server {src} to Server {'ALL' if dest_server_num == -1 else dest_server_num}: {message(message_type)}")
+
+        return True
 
 # Check the status of links and nodes
 def check_status():

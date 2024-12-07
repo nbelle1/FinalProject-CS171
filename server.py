@@ -6,6 +6,7 @@ import sys
 import threading
 import os
 import json
+import select
 import google.generativeai as genai
 from dotenv import load_dotenv
 from queue import Queue
@@ -219,6 +220,8 @@ def get_server_message():
                     # Call the appropriate function based on message type
                     if message_type == message.SERVER_INIT:
                         server_init_message(message_data)
+                    elif message_type == message.SERVER_KILL:
+                        server_kill_message()
                     #elif message_type == message.NEW_CONTEXT:
                     #    server_new_context(message_data)
                     #elif message_type == message.CREATE_QUERY:
@@ -246,7 +249,7 @@ def get_server_message():
         except Exception as e:
             print(f"Exception Thrown Getting Server Message: {e}")
             continue
-    print("TODO")
+    networkServer.close()
 
 
 def server_init_message(message_data):
@@ -260,6 +263,14 @@ def server_init_message(message_data):
     ballot_number["pid"] = server_num
 
     print(f"Assigned Server Number {SERVER_NUM}")
+
+def server_kill_message():
+    """
+    Dakota
+    Used to asign the server num when connected to the network server
+    """
+    stop_event.set()
+
 
 def server_new_context(user_message):
     """
@@ -366,7 +377,11 @@ def get_user_input():
     Example: if user requests a new context, call user_new_context().
     """
     while not stop_event.is_set():
-        user_input = input() # Input message from the user
+        #user_input = input() # Input message from the user
+        if select.select([sys.stdin], [], [], 0.5)[0]:  # Check for input with a timeout
+            user_input = sys.stdin.readline().strip()
+        else:
+            continue
         if user_input.lower() == 'exit':
             stop_event.set()
             if networkServer != None:
