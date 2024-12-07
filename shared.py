@@ -9,20 +9,19 @@ class message(Enum):
     SERVER_INIT = 1
     SERVER_KILL = 2
     
-    LEADER_PREPARE = 3
-    LEADER_PROMISE = 4
-    LEADER_ACCEPT = 5
+    PREPARE = 3
+    PROMISE = 4
 
-    CONSENSUS_PROPOSE = 6
-    CONSENSUS_ACCEPT = 7
-    CONSENSUS_ACCEPTED = 8
-    CONSENSUS_DECIDE = 9
+    LEADER_FORWARD = 5
+    ACCEPT = 6
+    ACCEPTED = 7
+    DECIDE = 8
 
-    LLM_RESPONSE = 10
-    SAVE_ANSWER = 11
+    LLM_RESPONSE = 9
+    SAVE_ANSWER = 10
 
     # Used to update context and op_num
-    UPDATE_CONTEXT = 12
+    UPDATE_CONTEXT = 11
 
 
 NETWORK_SERVER_PORT = 9000
@@ -39,24 +38,25 @@ message_data
         if SERVER_INIT:
             "server_num": int
         if SERVER_KILL:
-        if LEADER_PREPARE:
+        if PREPARE:
             "ballot_number": dictionary
-        if LEADER_PROMISE:
-        if LEADER_ACCEPT:
+        if PROMISE:
+            "ballot_number": dictionary
 
-        if CONSENSUS_PROPOSE:
+        if LEADER_FORWARD:
             "user_message": string
-            "ballot_message":string
-        if CONSENSUS_ACCEPT:
+        if ACCEPT:
             "ballot_number": dictionary
-        if CONSENSUS_ACCEPTED:
-        if CONSENSUS_DECIDE:
+        if ACCEPTED:
+            "ballot_number": dictionary
+        if DECIDE:
             "user_message": string
+            "request_server": int   //Original server that made the response
+
         if LLM_RESPONSE:
             "context_id": int
             "query_string": string
             "response": string
-            "request_server": int   //Original server that made the response
         if UPDATE_CONTEXT:
             "context": KeyValue
             "op_num": int

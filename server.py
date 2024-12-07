@@ -21,11 +21,20 @@ SERVER_NUM = -1
 
 # Consensus Variables
 leader = -1
+
+# Represent the maxmimum known ballot by this server
 ballot_number = {
     'seq_num': 0,
     'pid': -1,
     'op_num': 0
 }
+
+# Server's last accepted value (or leader's current command)
+accept_val = -1
+
+# Ballot of server's last accepted value (leader's current ballot)
+accept_num = -1
+
 pending_operations = Queue()
 num_leader_promises = 0
 num_consensus_accepted = 0
@@ -67,6 +76,28 @@ def connect_server():
                 break
     
 
+# def send_server_message(message_type, dest_server, message_args=None):
+#     """
+#     Dakota
+#     Send a message to the specified server with a given message type and arguments.
+#     Format message as <destination_server> <SERVER_NUM> <message_type> <args>.
+#     Use networkServer to send the formatted message.
+#     """
+
+#     #Create uniform message datastructure
+#     message_data = {
+#         "dest_server": dest_server,
+#         "sending_server": SERVER_NUM,
+#         "message_type": message_type.value,
+#         "args": message_args or {}  # Embed existing message_args here
+#     }
+
+#     #Serialize and send message
+#     serialized_message = json.dumps(message_data)
+#     networkServer.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
+    
+#     print(f"Sending {message_type} to server {dest_server}")
+
 def send_server_message(message_type, dest_server, message_args=None):
     """
     Dakota
@@ -74,8 +105,7 @@ def send_server_message(message_type, dest_server, message_args=None):
     Format message as <destination_server> <SERVER_NUM> <message_type> <args>.
     Use networkServer to send the formatted message.
     """
-
-    #Create uniform message datastructure
+    # Create uniform message datastructure
     message_data = {
         "dest_server": dest_server,
         "sending_server": SERVER_NUM,
@@ -83,11 +113,41 @@ def send_server_message(message_type, dest_server, message_args=None):
         "args": message_args or {}  # Embed existing message_args here
     }
 
-    #Serialize and send message
+    # Serialize and send message
     serialized_message = json.dumps(message_data)
     networkServer.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
+
+    if message_type == message.LLM_RESPONSE:
+        return  # Skip further processing for this message
+
+    # Extract the simple name from message_type (remove any prefix like "message.")
+    simple_message_type = str(message_type).split(".")[-1]
+
+    # Add formatted ballot to the print message if present
+    ballot_string = ""
+    if message_args and "ballot_number" in message_args:
+        ballot_string = ballot_to_string(message_args["ballot_number"])
+
+    # Add accept_val to the print message if present
+    accept_val_string = ""
+    if message_args and "accept_val" in message_args:
+        accept_val = message_args["accept_val"]
+        accept_val_string = f"{accept_val}" if accept_val != -1 else "Bottom Bottom"
     
-    print(f"Sent {message_type} to server {dest_server}")
+        # Make sure sending server isn't printed for query message
+        if accept_val != -1 and accept_val.startswith("query") and "." in accept_val:
+            accept_val_string = accept_val_string.split(".", 1)[0]
+        else:
+            accept_val_string = accept_val_string
+
+    # Format the destination for the print message
+    dest_message = "to ALL" if dest_server == -1 else f"to Server {dest_server}"
+
+    # Format and print the message
+    print(
+        f"Sending {simple_message_type}{f' {ballot_string}' if ballot_string else ''}{f' {accept_val_string}' if accept_val_string else ''} {dest_message}"
+    )
+
 
 
 
@@ -116,9 +176,45 @@ def get_server_message():
                     message_data, end_idx = json.JSONDecoder().raw_decode(buffer)
                     buffer = buffer[end_idx:].strip()  # Remove the processed message from the buffer
 
-                    # Get message type and process it
+                    # Extract message type and details
                     message_type = message(message_data["message_type"])
-                    print(f"Received {message_type}")
+                    sending_server = message_data["sending_server"]
+                    args = message_data.get("args", {})
+
+                    # Special handling for LLM_RESPONSE: no printing
+                    if message_type == message.LLM_RESPONSE:
+                        server_llm_response(message_data)
+                        continue  # Skip further processing for this message
+
+                    # Extract ballot info if present
+                    ballot_string = ""
+                    if "ballot_number" in args:
+                        ballot_string = ballot_to_string(args["ballot_number"])
+
+                    # Extract accept_val if present
+                    accept_val_string = ""
+                    if "accept_val" in args:
+                        accept_val = args["accept_val"]
+                        accept_val_string = f"{accept_val}" if accept_val != -1 else "Bottom Bottom"
+
+                        # Make sure sending server isn't printed for query message
+                        if accept_val != -1 and accept_val.startswith("query") and "." in accept_val:
+                            accept_val_string = accept_val_string.split(".", 1)[0]
+
+                    # Extract user_message if present
+                    user_message = args.get("user_message", "")
+
+                    # Format the sending server name
+                    sending_server_name = "Network Server" if sending_server == -1 else f"Server {sending_server}"
+
+                    # Format the message and print it
+                    simple_message_type = str(message_type).split(".")[-1]  # Extract simple name
+                    print(
+                        f"Received {simple_message_type}"
+                        f"{f' {ballot_string}' if ballot_string else ''}"
+                        f"{f' {accept_val_string}' if accept_val_string else ''}"
+                        f"{f' {user_message}' if user_message else ''} from {sending_server_name}"
+                    )
 
                     # Call the appropriate function based on message type
                     if message_type == message.SERVER_INIT:
@@ -127,22 +223,18 @@ def get_server_message():
                     #    server_new_context(message_data)
                     #elif message_type == message.CREATE_QUERY:
                     #    server_create_query(message_data)
-                    elif message_type == message.LEADER_PREPARE:
+                    elif message_type == message.PREPARE:
                         server_leader_prepare_message(message_data)
-                    elif message_type == message. LEADER_PROMISE:
-                        server_leader_promise_message()
-                    elif message_type == message.LEADER_ACCEPT:
-                        server_leader_accept_message(message_data)
-                    elif message_type == message.CONSENSUS_PROPOSE:
-                        server_consensus_propose_message(message_data)
-                    elif message_type == message.CONSENSUS_ACCEPT:
+                    elif message_type == message.PROMISE:
+                        server_leader_promise_message(message_data)
+                    elif message_type == message.LEADER_FORWARD:
+                        server_leader_forward_message(message_data)
+                    elif message_type == message.ACCEPT:
                         server_consensus_accept_message(message_data)
-                    elif message_type == message.CONSENSUS_ACCEPTED:
+                    elif message_type == message.ACCEPTED:
                         server_consensus_accepted_message()
-                    elif message_type == message.CONSENSUS_DECIDE:
+                    elif message_type == message.DECIDE:
                         server_consensus_decide_message(message_data)
-                    elif message_type == message.LLM_RESPONSE:
-                        server_llm_response(message_data)
                     elif message_type == message.SAVE_ANSWER:
                         server_save_answer(message_data)
                     elif message_type == message.UPDATE_CONTEXT:
@@ -185,7 +277,7 @@ def server_new_context(user_message):
 
         # Create the new context using the keyValue object
         keyValue.create_context(context_id)
-        print(f"Context '{context_id}' created successfully on this server.")
+        # : Server: Context created successfully on this server.")
 
     except Exception as e:
         print(f"Error occurred while processing NEW_CONTEXT: {e}")
@@ -201,8 +293,8 @@ def server_create_query(message_data):
     try:
         # Extract context ID and query string from the message data
         args = message_data.get("args", {})
-        user_message = args.get("user_message")
-        request_server = args.get("request_server")
+        user_message, request_server = args.get("accept_val").split(".", 1)
+        request_server = int(request_server)
 
         parts = user_message.split(" ", 2)  # Split into 'query', '<context_id>', and '<query_string>'
         if len(parts) != 3 or parts[0] != "query":
@@ -217,7 +309,7 @@ def server_create_query(message_data):
         
         # Step 1: Add the query to the specified context
         keyValue.create_query(context_id, query_string)
-        print(f"Server: Query added to context '{context_id}': {query_string}")
+        # print(f"DEBUG: Server: Query added to context '{context_id}': {query_string}")
 
         # Step 2: Retrieve the context as a string
         context_string = keyValue.view(context_id)
@@ -226,9 +318,10 @@ def server_create_query(message_data):
             return
 
         # Step 3: Generate a response by querying Gemini
-        prompt_answer = "Answer: "
+        prompt_answer = ""
         response = query_gemini(context_string + "\n" + prompt_answer)
-        print(f"Server: Generated response for context '{context_id}': {response}")
+        if request_server == SERVER_NUM:
+            print(f"Context '{context_id}' - Candidate {SERVER_NUM}: {response}")
 
         # Step 4: Send the response back to the calling server
         response_message = {
@@ -253,7 +346,8 @@ def server_llm_response(message_data):
     """
     args = message_data.get("args", {})
     response = args.get("response")
-    print(response)
+
+    print(f"Context '{args.get("context_id")}' - Candidate {message_data.get("sending_server")}: {response}")
 
 def server_save_answer(message_data):
     """
@@ -281,7 +375,8 @@ def get_user_input():
         elif user_input.startswith("create"):
             user_new_context(user_input)
         elif user_input.startswith("query"):
-            user_create_query(user_input)
+            user_input_with_server = f"{user_input}.{SERVER_NUM}"
+            user_create_query(user_input_with_server)
         elif user_input.startswith("choose"):
             user_select_answer(user_input)
         elif user_input.startswith("viewall"):
@@ -430,41 +525,64 @@ def user_view_all_context():
     print("\n".join(formatted_output))
 
 # ------  CONSENSUS  ------
-    # --- Election Phase ---
+    
+def ballot_to_string(ballot_number):
+    """
+    Converts a ballot dictionary into a string representation.
+    
+    Args:
+        ballot_number (dict): A dictionary with keys 'seq_num', 'pid', and 'op_num'.
+    
+    Returns:
+        str: The string representation of the ballot in the format "<seq_num, pid, op_num>".
+    """
+    return f"<{ballot_number['seq_num']}, {ballot_number['pid']}, {ballot_number['op_num']}>" 
+
+    
+# --- Election Phase ---
 def leader_init():
     
-    print("Leader init")
+    # print("DEBUG: Leader init")
     if leader == -1:
         start_leader_election()
 
 def start_leader_election():
 
-    print("Starting Election")
-    global num_leader_promises, ballot_number, leader
+    # print("DEBUG: Starting Election")
+    global num_leader_promises, ballot_number, leader, accept_num, accept_val
     
     num_leader_promises = 0
+    
+    # Update currently known ballot with your PID to create new ballot
     ballot_number["seq_num"] += 1
+    ballot_number["pid"] = SERVER_NUM
     message_args = {
         "ballot_number": ballot_number,
     }
-    send_server_message(message.LEADER_PREPARE, -1, message_args)
-    while num_leader_promises < MAX_SERVER_NUM - 1:
+    send_server_message(message.PREPARE, -1, message_args)
+    while num_leader_promises < MAX_SERVER_NUM - 2:
         time.sleep(0.1)
         #TODO: TIMOUT FOR FAILURE
 
-    # send_server_message(message.LEADER_ACCEPT, -1)
+    
     leader = SERVER_NUM
     threading.Thread(target=run_leader).start()
 
 def server_leader_prepare_message(message_data):
+    """
+    Handle recieving a prepare message from server who wants to be leader
+    """
 
     # Extract context ID and query string from the message data
+    global ballot_number
+    global accept_val
+    global accept_num
     args = message_data.get("args", {})
     ballot = args.get("ballot_number")
     sending_server = message_data.get("sending_server")
 
     # Return Promise if message seq_num greater than local seq_num, and set local seq_num to new value
-    if ballot["seq_num"] > ballot_number["seq_num"] or ballot["pid"] > ballot_number["pid"]:
+    if ballot["seq_num"] > ballot_number["seq_num"] or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] == ballot_number["pid"]) or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] > ballot_number["pid"]):
         # If proposer's op_num is lower, send update their context will up-to-date operations
         if ballot["op_num"] < ballot_number["op_num"]:
             message_args = {
@@ -473,11 +591,20 @@ def server_leader_prepare_message(message_data):
                 "op_num": ballot_number["op_num"]
             }
             send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
-            ballot_number["seq_num"] = ballot["seq_num"]
-        # Send a promise to proposer otherwise
+
         else:
-            send_server_message(message.LEADER_PROMISE, sending_server)
-            ballot_number["seq_num"] = ballot["seq_num"]
+            # Set maximum known ballot to recieved ballot
+            ballot_number = ballot
+            
+            message_args = {
+                "ballot_number": ballot_number,
+                "accept_val": accept_val,
+                "accept_num": accept_num
+            }
+            
+            # Send a promise to proposer with this server's ballot
+            send_server_message(message.PROMISE, sending_server, message_args)
+
 
 
       
@@ -501,23 +628,40 @@ def server_update_context(message_data):
     start_leader_election()
 
 
-def server_leader_promise_message():
+def server_leader_promise_message(message_data):
+    """
+    Handle recieving a promise message from a server after sending a prepare.
+    Compare their accept_num to yours. If their's is not -1 and is bigger than yours,
+    set your accept_val to their accept_val.
+    """
+    global accept_val
+    global accept_num
+    args = message_data.get("args", {})
+    received_accept_num = args.get("accept_num")
+    received_accept_val = args.get("accept_val")
+
+    if received_accept_num != -1:
+        if accept_num == -1:
+            accept_num = received_accept_num
+            accept_val = received_accept_val
+        elif accept_num != -1 and received_accept_num > accept_num:
+            accept_num = received_accept_num
+            accept_val = received_accept_val
 
     global num_leader_promises
     num_leader_promises += 1
 
 
-# TODO: Delete later, currently unused
-def server_leader_accept_message(message_data):
-
-    global leader
-    leader = message_data.get("sending_server")
-
     # --- Decision Phase ---
-def insert_operation_to_queue(user_message, ballot):
+# def insert_operation_to_queue(user_message, ballot):
 
-    #Insert message and ballot to queue
-    pending_operations.put((user_message, ballot))
+#     #Insert message and ballot to queue
+#     pending_operations.put((user_message, ballot))
+
+def insert_operation_to_queue(user_message):
+
+    #Insert message to queue
+    pending_operations.put((user_message))
 
 def get_consensus(user_message):
     """
@@ -529,32 +673,39 @@ def get_consensus(user_message):
 
     #If leader add operation to operation queue
     if leader == SERVER_NUM:
-        insert_operation_to_queue(user_message, ballot_number)
+        insert_operation_to_queue(user_message)
     #If not send message to leader to do so
     else:
         message_args = {
             "user_message": user_message,
-            "ballot_number": ballot_number,
         }
-        send_server_message(message.CONSENSUS_PROPOSE, leader, message_args)
+        send_server_message(message.LEADER_FORWARD, leader, message_args)
 
 def run_leader():
 
     global num_consensus_accepted
+    global accept_val
+    global accept_num
 
     while not stop_event.is_set():
         if not pending_operations.empty():
-            #Pop the next operation
-            user_message, ballot = pending_operations.get()
+
+            if accept_val == -1:
+                #Pop the next operation
+                user_message = pending_operations.get()
+                accept_val = user_message
+
+            # Use leader's ballot_number and accept_val
             accept_message_args = {
-                "ballot_number": ballot,
+                "ballot_number": ballot_number,
+                "accept_val": accept_val,
             }
             #Send Accept? message to all servers with message
             num_consensus_accepted = 0
-            send_server_message(message.CONSENSUS_ACCEPT, -1, accept_message_args)
+            send_server_message(message.ACCEPT, -1, accept_message_args)
 
             #Wait for all servers to respond
-            while num_consensus_accepted < MAX_SERVER_NUM - 1:
+            while num_consensus_accepted < MAX_SERVER_NUM - 2:
                 time.sleep(0.1)
                 #TODO: TIMOUT FOR FAILURE
 
@@ -564,26 +715,27 @@ def run_leader():
 
             #Broadcast consensus decide
             decide_message_args = {
-                "user_message": user_message,
-                "request_server": ballot["pid"]
+                "accept_val": accept_val,
             }
-            send_server_message(message.CONSENSUS_DECIDE, -1, decide_message_args)
+            send_server_message(message.DECIDE, -1, decide_message_args)
             
-            #Do Operation Locally (mimic message with minium pieces needed)
+            #Do Operation Locally (mimic message with minimum pieces needed)
             local_decide_message = {
-                "sending_server": SERVER_NUM,
                 "args": decide_message_args,
             }
             server_consensus_decide_message(local_decide_message)
 
 
-def server_consensus_propose_message(message_data):
-        
+def server_leader_forward_message(message_data):
+    """
+    As the leader, insert recieved message into service queue
+    """
     args = message_data.get("args", {})
     user_message = args.get("user_message")
-    ballot = args.get("ballot_number")
+    #ballot = args.get("ballot_number")
 
-    insert_operation_to_queue(user_message, ballot)
+    #insert_operation_to_queue(user_message, ballot)
+    insert_operation_to_queue(user_message)
 
 def server_consensus_accepted_message():
 
@@ -591,16 +743,45 @@ def server_consensus_accepted_message():
     num_consensus_accepted += 1
 
 def server_consensus_accept_message(message_data):
-
+    
+    global ballot_number
+    global accept_val
+    global accept_num
     args = message_data.get("args", {})
     ballot = args.get("ballot_number")
     sending_server = message_data.get("sending_server")
+    
+    # Return Accept if sender has higher ballot than own ballot
+    if ballot["seq_num"] > ballot_number["seq_num"] or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] == ballot_number["pid"]) or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] > ballot_number["pid"]):
+        
+        # If proposer's op_num is lower, send own context to update their context with up-to-date operations
+        if ballot["op_num"] < ballot_number["op_num"]:
+            message_args = {
+                # TODO: Is KeyValue the best way to send all of the context?
+                "context": keyValue,
+                "op_num": ballot_number["op_num"]
+            }
+            send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
+            ballot_number["seq_num"] = ballot["seq_num"]
+        
+        # Send an accepted message to proposer otherwise
+        else:
+            # Server accepts value and logs it in case leader fails
+            accept_val = args.get("accept_val")
+            accept_num = ballot
+            
+            message_args = {
+                "ballot_number": ballot_number,
+                "accept_val": accept_val
+            }
+            send_server_message(message.ACCEPTED, sending_server, message_args)
+            
+            # Set sending server to leader for future reference
+            global leader
+            leader = sending_server
 
-    if ballot["op_num"] >= ballot_number["op_num"]:
-        send_server_message(message.CONSENSUS_ACCEPTED, sending_server)
-        #TODO: Might have to clarify what ballot talking about
-    else:
-        print(f"Consensus Rejected: incoming ballot op_num {ballot["op_num"]} < server ballot op_num {ballot_number["op_num"]}")
+            # Set maximum known ballot number to recieved ballot
+            ballot_number = ballot
 
 
 def server_consensus_decide_message(message_data):
@@ -608,8 +789,14 @@ def server_consensus_decide_message(message_data):
     #Increment local ballot_number
     ballot_number["op_num"] += 1
 
+    # Reset accept_val and accept_num
+    global accept_val
+    global accept_num
+    accept_val = -1
+    accept_num = -1
+
     args = message_data.get("args", {})
-    user_message = args.get("user_message")
+    user_message = args.get("accept_val")
     if user_message.startswith("create"):
         server_new_context(user_message)
     elif user_message.startswith("query"):
