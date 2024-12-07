@@ -716,12 +716,18 @@ def server_leader_prepare_message(message_data):
 
         else:
             # Set maximum known ballot to recieved ballot
+
+            # Set a help flag if acceptor has a lower number of operations completed than leader
+            help_needed = ballot["op_num"] > ballot_number["op_num"]
+        
+            
             ballot_number = ballot
             
             message_args = {
                 "ballot_number": ballot_number,
                 "accept_val": accept_val,
-                "accept_num": accept_num
+                "accept_num": accept_num,
+                "help": help_needed
             }
             
             # Send a promise to proposer with this server's ballot
@@ -769,6 +775,17 @@ def server_leader_promise_message(message_data):
     args = message_data.get("args", {})
     received_accept_num = args.get("accept_num")
     received_accept_val = args.get("accept_val")
+
+    # Handle case that an acceptor is behind in number of operation by sending them an update context message
+    if args.get("help"): 
+        message_args = {
+                "context": keyValue.to_dict(),  # Serialize the KeyValue object
+                "op_num": ballot_number["op_num"],
+                "leader": leader
+        }
+        send_server_message(message.UPDATE_CONTEXT, message_data.get("sending_server"), message_args)
+        
+    time.sleep(.2)
 
     if received_accept_num != -1:
         if accept_num == -1:
