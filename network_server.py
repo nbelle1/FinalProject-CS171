@@ -14,9 +14,6 @@ global server_running
 stop_event = threading.Event()
 lock = threading.Lock()
 
-#TODO: Place in forwarding lock around print and soc.sending portion for thread-safety
-
-
 socket_info = [
     [None, None, None],  # Sockets (initially null)
     [
@@ -274,7 +271,7 @@ def forward_server_message(server_message):
     Message format <destination server> <rest of message>
     """
     #Required Interval Between Message Passing
-    time.sleep(3)
+    time.sleep(1)
     try:
         #Lock to protect prints and sending messages
         with lock:
@@ -304,7 +301,6 @@ def forward_server_message(server_message):
                 #print(f"Failed Node {dest_server_num}")
                 socket_info[0][dest_server_num].close()
                 socket_info[0][dest_server_num] = None
-
 
     except Exception as e:
         # Print the error along with the message that caused it

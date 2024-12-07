@@ -36,9 +36,14 @@ accept_val = -1
 # Ballot of server's last accepted value (leader's current ballot)
 accept_num = -1
 
+#Used for operations
 pending_operations = Queue()
 num_leader_promises = 0
 num_consensus_accepted = 0
+leader_ack = 0
+
+#Used for Storing responses format = {tuple(context_id, query), list(responses)}
+response_dict = {}
 
 
 
@@ -232,14 +237,14 @@ def get_server_message():
                         server_leader_promise_message(message_data)
                     elif message_type == message.LEADER_FORWARD:
                         server_leader_forward_message(message_data)
+                    elif message_type == message.LEADER_ACK:
+                        server_leader_ack_message(message_data)
                     elif message_type == message.ACCEPT:
                         server_consensus_accept_message(message_data)
                     elif message_type == message.ACCEPTED:
                         server_consensus_accepted_message()
                     elif message_type == message.DECIDE:
                         server_consensus_decide_message(message_data)
-                    elif message_type == message.SAVE_ANSWER:
-                        server_save_answer(message_data)
                     elif message_type == message.UPDATE_CONTEXT:
                         server_update_context(message_data)
                 except json.JSONDecodeError:
@@ -332,7 +337,8 @@ def server_create_query(message_data):
         prompt_answer = ""
         response = query_gemini(context_string + "\n" + prompt_answer)
         if request_server == SERVER_NUM:
-            print(f"Context '{context_id}' - Candidate {SERVER_NUM}: {response}")
+            save_response_to_dict(context_id, response)
+
 
         # Step 4: Send the response back to the calling server
         response_message = {
@@ -355,18 +361,53 @@ def server_llm_response(message_data):
     Add the received LLM response to the llm_responses collection.
     Print the response for server-side logging.
     """
+    
     args = message_data.get("args", {})
     response = args.get("response")
+    context_id = args.get("context_id")
+    
+    #Add responses to datastructure
+    save_response_to_dict(context_id, response)
+    
+def save_response_to_dict(context_id, response):
+    """
+    Helper Function To Add Response to response_dict
+    """
+    #Create List if needed
+    if (context_id) not in response_dict:
+        response_dict[(context_id)] = []
+    
+    #Get The Candidate Num
+    candidate_num = len(response_dict[context_id])
 
-    print(f"Context '{args.get("context_id")}' - Candidate {message_data.get("sending_server")}: {response}")
+    #Add to response dict and print
+    response_dict[context_id].append(response)
+    print(f"Context '{context_id}' - Candidate {candidate_num}: {response}")
 
-def server_save_answer(message_data):
+
+def server_choose_response(message_data):
     """
     Save the selected answer to the keyValue storage.
     Call kv.save_answer() to persist the answer.
     Send confirmation back to calling server(s) if needed.
     """
-    print("TODO")
+    args = message_data.get("args", {})
+    user_message= args.get("accept_val")
+
+
+    parts = user_message.split(" ", 2)  # Split into 'choose', '<context_id>', and '<response_string>'
+    if len(parts) != 3 or parts[0] != "choose":
+        print("Error: Invalid input format. Use 'choose <context_id> <response>'")
+        return
+
+    context_id, response = parts[1].strip(), parts[2].strip()
+
+    if not context_id or not response:
+        print("Error: Context ID and query cannot be empty.")
+        return
+
+    keyValue.save_answer(context_id, response)
+    
 
 
 # ------  USER  ------
@@ -498,7 +539,34 @@ def user_select_answer(user_message):
     Send SAVE_ANSWER message to all servers via send_server_message().
     Call kv.save_answer() locally to save the chosen answer.
     """
-    print("TODO")
+    #Take user_message format 'choose <context_id> <response_number>' and make sure valid and get variables
+    parts = user_message.split()
+
+    # Check if the message has the correct format (i.e., 'choose <context_id> <response_number>')
+    if len(parts) != 3:
+        print("Invalid choose format: must be 'choose context_id response_number")
+        return
+    try:
+        # Extract and convert context_id and response_number to integers
+        context_id = parts[1]
+        response_number = int(parts[2])
+
+        #Check if context_id in saved answers
+        if context_id not in response_dict:
+            print(f"Context_id {context_id} not in saved response_dict")
+            return
+
+        #Check if valid Response Number
+        if response_number < 0 and response_number < len(response_dict[context_id]):
+            print(f"Invalide Response Number {response_number}")
+            return
+        
+    except ValueError:
+        print("Invalid format. context_id and response_number must be integers.")
+    
+    #Make have message include selected response
+    new_user_message = f"choose {context_id} {response_dict[context_id][response_number]}"
+    get_consensus(new_user_message)
 
 def user_view_context(user_message):
     """
@@ -691,10 +759,19 @@ def get_consensus(user_message):
         insert_operation_to_queue(user_message)
     #If not send message to leader to do so
     else:
+        global leader_ack
+        leader_ack = 0
         message_args = {
             "user_message": user_message,
         }
         send_server_message(message.LEADER_FORWARD, leader, message_args)
+
+        #Check To Make Sure Leader Forward Has been Received
+        time.sleep(7)
+        if leader_ack == 0:
+            #TODO: Any Logic for leader forward ack not received
+            print(f"Fail: Leader Acknowledge Not Received from {leader} for message: {user_message}")
+        
 
 def run_leader():
 
@@ -745,12 +822,19 @@ def server_leader_forward_message(message_data):
     """
     As the leader, insert recieved message into service queue
     """
+    sending_server = message_data.get("sending_server")
     args = message_data.get("args", {})
     user_message = args.get("user_message")
     #ballot = args.get("ballot_number")
 
     #insert_operation_to_queue(user_message, ballot)
     insert_operation_to_queue(user_message)
+    
+    send_server_message(message.LEADER_ACK, sending_server, args)
+
+def server_leader_ack_message(message_data):
+    global leader_ack
+    leader_ack = 1
 
 def server_consensus_accepted_message():
 
@@ -816,6 +900,8 @@ def server_consensus_decide_message(message_data):
         server_new_context(user_message)
     elif user_message.startswith("query"):
         server_create_query(message_data)
+    elif user_message.startswith("choose"):
+        server_choose_response(message_data)
     else:
         print(f"UNSUPPORTED SERVER CONSENSUS DECIDE MESSAGE: {user_message}")
 

@@ -13,12 +13,13 @@ class message(Enum):
     PROMISE = 4
 
     LEADER_FORWARD = 5
-    ACCEPT = 6
-    ACCEPTED = 7
-    DECIDE = 8
+    LEADER_ACK = 6
 
-    LLM_RESPONSE = 9
-    SAVE_ANSWER = 10
+    ACCEPT = 7
+    ACCEPTED = 8
+    DECIDE = 9
+
+    LLM_RESPONSE = 10
 
     # Used to update context and op_num
     UPDATE_CONTEXT = 11
@@ -45,6 +46,8 @@ message_data
 
         if LEADER_FORWARD:
             "user_message": string
+        if LEADER_ACK:
+            "user_message": string
         if ACCEPT:
             "ballot_number": dictionary
         if ACCEPTED:
@@ -52,7 +55,6 @@ message_data
         if DECIDE:
             "user_message": string
             "request_server": int   //Original server that made the response
-
         if LLM_RESPONSE:
             "context_id": int
             "query_string": string
