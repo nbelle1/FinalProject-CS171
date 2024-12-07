@@ -4,7 +4,7 @@ import sys
 import time
 import socket
 import json
-from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM
+from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM, DELAY
 import threading
 
 
@@ -72,6 +72,8 @@ def fail_link(user_message):
     
     #Set Link To False
     socket_info[1][result[0]][result[1]] = 0
+    socket_info[1][result[1]][result[0]] = 0
+
     print(f"Failed Link src={result[0]}, dest={result[1]}")
 
 # Fix a link between two servers
@@ -88,6 +90,8 @@ def fix_link(user_message):
     
     #Set Link To True
     socket_info[1][result[0]][result[1]] = 1
+    socket_info[1][result[1]][result[0]] = 1
+
     print(f"Fixed Link src={result[0]}, dest={result[1]}")
 
 def print_socket_status():
@@ -271,7 +275,7 @@ def forward_server_message(server_message):
     Message format <destination server> <rest of message>
     """
     #Required Interval Between Message Passing
-    time.sleep(1)
+    time.sleep(DELAY)
     try:
         #Lock to protect prints and sending messages
         with lock:

@@ -27,6 +27,8 @@ class message(Enum):
 
 NETWORK_SERVER_PORT = 9000
 MAX_SERVER_NUM = 3
+DELAY = 1
+TIMEOUT_TIME = DELAY * 3
 
 """
 JSON Format:
@@ -43,6 +45,8 @@ message_data
             "ballot_number": dictionary
         if PROMISE:
             "ballot_number": dictionary
+            "accept_val": string or -1
+            "accept_num": dict or -1
 
         if LEADER_FORWARD:
             "user_message": string
@@ -50,11 +54,13 @@ message_data
             "user_message": string
         if ACCEPT:
             "ballot_number": dictionary
+            "accept_val": string
+            "accept_num": dict
         if ACCEPTED:
             "ballot_number": dictionary
+            "accept_val": string
         if DECIDE:
-            "user_message": string
-            "request_server": int   //Original server that made the response
+            "accept_val": string
         if LLM_RESPONSE:
             "context_id": int
             "query_string": string
@@ -62,6 +68,7 @@ message_data
         if UPDATE_CONTEXT:
             "context": KeyValue
             "op_num": int
+            "leader": int
 
 
 

@@ -10,7 +10,7 @@ import select
 import google.generativeai as genai
 from dotenv import load_dotenv
 from queue import Queue
-from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM
+from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM, DELAY, TIMEOUT_TIME
 
 from key_value import KeyValue
 
@@ -210,6 +210,9 @@ def get_server_message():
                     # Extract user_message if present
                     user_message = args.get("user_message", "")
 
+                    if user_message and user_message.startswith("query") and "." in user_message:
+                            user_message = user_message.split(".", 1)[0]
+
                     # Format the sending server name
                     sending_server_name = "Network Server" if sending_server == -1 else f"Server {sending_server}"
 
@@ -242,7 +245,7 @@ def get_server_message():
                     elif message_type == message.ACCEPT:
                         server_consensus_accept_message(message_data)
                     elif message_type == message.ACCEPTED:
-                        server_consensus_accepted_message()
+                        server_consensus_accepted_message(message_data)
                     elif message_type == message.DECIDE:
                         server_consensus_decide_message(message_data)
                     elif message_type == message.UPDATE_CONTEXT:
@@ -294,6 +297,7 @@ def server_new_context(user_message):
         # Create the new context using the keyValue object
         keyValue.create_context(context_id)
         # : Server: Context created successfully on this server.")
+        print(f"NEW_CONTEXT {context_id}")
 
     except Exception as e:
         print(f"Error occurred while processing NEW_CONTEXT: {e}")
@@ -329,9 +333,13 @@ def server_create_query(message_data):
 
         # Step 2: Retrieve the context as a string
         context_string = keyValue.view(context_id)
+
         if not context_string:
             print(f"Error: Context '{context_id}' not found.")
             return
+        
+        # Print updated context with query
+        print(f"NEW_QUERY on {context_id} with {context_string}")
 
         # Step 3: Generate a response by querying Gemini
         prompt_answer = ""
@@ -407,6 +415,8 @@ def server_choose_response(message_data):
         return
 
     keyValue.save_answer(context_id, response)
+
+    print(f"CHOSEN ANSWER on {context_id} with {response}")
     
 
 
@@ -486,6 +496,7 @@ def user_create_query(user_message):
     Obtain response from query_gemini() and add to llm_responses collection.
     Print the response for user.
     """
+
     # Extract context ID and query string from the user message
     parts = user_message.split(" ", 2)  # Split into 'query', '<context_id>', and '<query_string>'
     if len(parts) != 3 or parts[0] != "query":
@@ -498,6 +509,12 @@ def user_create_query(user_message):
     if not context_id or not query_string:
         print("Error: Context ID and query cannot be empty.")
         return
+    
+    # Clear responses only for the given context_id
+    global response_dict
+    if context_id in response_dict:
+        response_dict[context_id].clear()
+    
 
     # Step 1: Get consensus from all servers
     get_consensus(user_message)
@@ -643,9 +660,17 @@ def start_leader_election():
         "ballot_number": ballot_number,
     }
     send_server_message(message.PREPARE, -1, message_args)
+
+    # Wait for all servers to respond with a timeout
+    start_time = time.time()  # Record the start time
     while num_leader_promises < MAX_SERVER_NUM - 2:
         time.sleep(0.1)
-        #TODO: TIMOUT FOR FAILURE
+        if time.time() - start_time > (TIMEOUT_TIME):  # Check if TIMEOUT seconds have elapsed
+            print("TIMEOUT: Leader promises not received. Running leader election again.")
+
+            # Restart leader election
+            leader_init()
+            return
 
     
     leader = SERVER_NUM
@@ -660,18 +685,32 @@ def server_leader_prepare_message(message_data):
     global ballot_number
     global accept_val
     global accept_num
+    global leader
     args = message_data.get("args", {})
     ballot = args.get("ballot_number")
     sending_server = message_data.get("sending_server")
 
+    # Handle case that non-leader failed and is trying to get context
+    if leader == SERVER_NUM:
+        message_args = {
+            # TODO: Is KeyValue the best way to send all of the context?
+            "context": keyValue.to_dict(),  # Serialize the KeyValue object
+            "op_num": ballot_number["op_num"],
+            "leader": leader
+        }
+        send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
+
+
+
     # Return Promise if message seq_num greater than local seq_num, and set local seq_num to new value
-    if ballot["seq_num"] > ballot_number["seq_num"] or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] == ballot_number["pid"]) or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] > ballot_number["pid"]):
+    elif ballot["seq_num"] > ballot_number["seq_num"] or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] == ballot_number["pid"]) or (ballot["seq_num"] == ballot_number["seq_num"] and ballot["pid"] > ballot_number["pid"]):
         # If proposer's op_num is lower, send update their context will up-to-date operations
         if ballot["op_num"] < ballot_number["op_num"]:
             message_args = {
                 # TODO: Is KeyValue the best way to send all of the context?
-                "context": keyValue,
-                "op_num": ballot_number["op_num"]
+                "context": keyValue.to_dict(),  # Serialize the KeyValue object
+                "op_num": ballot_number["op_num"],
+                "leader": leader
             }
             send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
 
@@ -700,15 +739,23 @@ def server_update_context(message_data):
     """
     global keyValue
     global ballot_number
+    global leader
     args = message_data.get("args", {})
 
+    if(args["leader"] != SERVER_NUM):
+        leader = args["leader"]
+
     # Update context and op_num
-    keyValue = args.get("context")
     ballot_number["op_num"] = args.get("op_num")
+    received_data = args.get("context")
+
+    if received_data:
+        keyValue = KeyValue.from_dict(received_data)  # Rebuild KeyValue object
+
 
     # Restart leader election 
     #TODO: maybe call leader_init instead??
-    start_leader_election()
+    # start_leader_election()
 
 
 def server_leader_promise_message(message_data):
@@ -752,6 +799,7 @@ def get_consensus(user_message):
     Communicate with all servers to confirm action or context creation.
     Return consensus result to calling function.
     """
+    global leader
     leader_init()
 
     #If leader add operation to operation queue
@@ -767,10 +815,15 @@ def get_consensus(user_message):
         send_server_message(message.LEADER_FORWARD, leader, message_args)
 
         #Check To Make Sure Leader Forward Has been Received
-        time.sleep(7)
+        time.sleep(TIMEOUT_TIME)
         if leader_ack == 0:
-            #TODO: Any Logic for leader forward ack not received
-            print(f"Fail: Leader Acknowledge Not Received from {leader} for message: {user_message}")
+            print(f"TIMEOUT: Leader Acknowledge Not Received from {leader} for message: {user_message}")
+            
+            # Assume leader failed, set leader to none
+            leader = -1
+
+            # Rerun get consensus with no known leader 
+            get_consensus(user_message)
         
 
 def run_leader():
@@ -778,6 +831,7 @@ def run_leader():
     global num_consensus_accepted
     global accept_val
     global accept_num
+    global leader
 
     while not stop_event.is_set():
         if not pending_operations.empty():
@@ -800,6 +854,18 @@ def run_leader():
             while num_consensus_accepted < MAX_SERVER_NUM - 2:
                 time.sleep(0.1)
                 #TODO: TIMOUT FOR FAILURE
+
+            # Wait for all servers to respond with a timeout
+            start_time = time.time()  # Record the start time
+            while num_consensus_accepted < MAX_SERVER_NUM - 2:
+                time.sleep(0.1)
+                if time.time() - start_time > (TIMEOUT_TIME):  # Check if TIMEOUT seconds have elapsed
+                    print("TIMEOUT: Accepted messages not received, running new leader election again.")
+                    leader = -1
+
+                    # Restart leader election
+                    leader_init()
+                    return
 
             #TODO Maybe: Remove from pending operations now??
 
@@ -827,17 +893,29 @@ def server_leader_forward_message(message_data):
     user_message = args.get("user_message")
     #ballot = args.get("ballot_number")
 
-    #insert_operation_to_queue(user_message, ballot)
-    insert_operation_to_queue(user_message)
-    
-    send_server_message(message.LEADER_ACK, sending_server, args)
+    # Don't respond if server doesn't know that it is leader
+    if(SERVER_NUM == leader):
+        insert_operation_to_queue(user_message) 
+        send_server_message(message.LEADER_ACK, sending_server, args)
 
 def server_leader_ack_message(message_data):
     global leader_ack
     leader_ack = 1
 
-def server_consensus_accepted_message():
-
+def server_consensus_accepted_message(message_data):
+    args = message_data.get("args", {})
+    
+    # Handle case that an acceptor is behind in number of operation by sending them an update context message
+    if args.get("help"): 
+        message_args = {
+                # TODO: Is KeyValue the best way to send all of the context?
+                "context": keyValue.to_dict(),  # Serialize the KeyValue object
+                "op_num": ballot_number["op_num"],
+                "leader": leader
+        }
+        send_server_message(message.UPDATE_CONTEXT, message_data.get("sending_server"), message_args)
+        
+    time.sleep(.2)
     global num_consensus_accepted
     num_consensus_accepted += 1
 
@@ -862,16 +940,21 @@ def server_consensus_accept_message(message_data):
             }
             send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
             ballot_number["seq_num"] = ballot["seq_num"]
+
         
         # Send an accepted message to proposer otherwise
         else:
             # Server accepts value and logs it in case leader fails
             accept_val = args.get("accept_val")
             accept_num = ballot
+
+            # Set a help flag if acceptor has a lower number of operations completed than leader
+            help_needed = ballot["op_num"] > ballot_number["op_num"]
             
             message_args = {
                 "ballot_number": ballot_number,
-                "accept_val": accept_val
+                "accept_val": accept_val,
+                "help": help_needed
             }
             send_server_message(message.ACCEPTED, sending_server, message_args)
             

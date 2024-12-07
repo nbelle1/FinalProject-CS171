@@ -11,6 +11,27 @@ class KeyValue:
         """
         self.data = {}
 
+    def to_dict(self):
+        """
+        Convert the KeyValue object to a dictionary format that can be serialized to JSON.
+        Returns:
+            dict: The internal data of the KeyValue object.
+        """
+        return self.data
+
+    @classmethod
+    def from_dict(cls, data):
+        """
+        Create a KeyValue object from a dictionary.
+        Args:
+            data (dict): A dictionary representation of a KeyValue object.
+        Returns:
+            KeyValue: A new KeyValue object initialized with the provided data.
+        """
+        kv = cls()
+        kv.data = data
+        return kv
+
     def create_context(self, context_id):
         """
         Nik
@@ -80,7 +101,7 @@ class KeyValue:
         # Build a formatted string for the queries and answers
         formatted_output = []
         for query in queries:
-            answer = responses.get(query, "No answer provided")
+            answer = responses.get(query, "No answer chosen")
             formatted_output.append(f"Query: {query}\nAnswer: {answer}")
 
         return "\n".join(formatted_output)
@@ -103,7 +124,7 @@ class KeyValue:
             queries = context_data["queries"]
             responses = context_data["responses"]
             result[context_id] = [
-                {"query": query, "answer": responses.get(query, "No answer provided")}
+                {"query": query, "answer": responses.get(query, "No answer chosen")}
                 for query in queries
             ]
         return result
