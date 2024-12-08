@@ -46,8 +46,6 @@ leader_ack = 0
 response_dict = {}
 
 
-
-
 # ------  SERVER  ------
 def connect_server():
     """
@@ -81,29 +79,6 @@ def connect_server():
                 print(f"FAILED To Connect to Network Server on {NETWORK_SERVER_PORT}")
                 break
     
-
-# def send_server_message(message_type, dest_server, message_args=None):
-#     """
-#     Dakota
-#     Send a message to the specified server with a given message type and arguments.
-#     Format message as <destination_server> <SERVER_NUM> <message_type> <args>.
-#     Use networkServer to send the formatted message.
-#     """
-
-#     #Create uniform message datastructure
-#     message_data = {
-#         "dest_server": dest_server,
-#         "sending_server": SERVER_NUM,
-#         "message_type": message_type.value,
-#         "args": message_args or {}  # Embed existing message_args here
-#     }
-
-#     #Serialize and send message
-#     serialized_message = json.dumps(message_data)
-#     networkServer.send(serialized_message.encode('utf-8'))  # Convert JSON string to bytes
-    
-#     print(f"Sending {message_type} to server {dest_server}")
-
 def send_server_message(message_type, dest_server, message_args=None):
     """
     Dakota
@@ -153,8 +128,6 @@ def send_server_message(message_type, dest_server, message_args=None):
     print(
         f"Sending {simple_message_type}{f' {ballot_string}' if ballot_string else ''}{f' {accept_val_string}' if accept_val_string else ''} {dest_message}"
     )
-
-
 
 
 def get_server_message():
@@ -230,10 +203,6 @@ def get_server_message():
                         server_init_message(message_data)
                     elif message_type == message.SERVER_KILL:
                         server_kill_message()
-                    #elif message_type == message.NEW_CONTEXT:
-                    #    server_new_context(message_data)
-                    #elif message_type == message.CREATE_QUERY:
-                    #    server_create_query(message_data)
                     elif message_type == message.PREPARE:
                         server_leader_prepare_message(message_data)
                     elif message_type == message.PROMISE:
@@ -477,24 +446,9 @@ def user_new_context(user_message):
         return
     
 
-    # Step 1: Get consensus from all servers
+    #Get consensus from all servers
     get_consensus(user_message)
-    # if not consensus:
-    #     print("Consensus failed. Unable to create new context.")
-    #     return
-
-    # Step 2: Send NEW_CONTEXT message to all servers (MODIFY TO SEND JSON)
-    # Structure the message arguments as JSON
-    #message_args = {
-    #    "context_id": context_id
-    #}
-
-    # Send the message using send_server_message
-    #send_server_message(message.NEW_CONTEXT, -1, message_args)
-
-    # Step 3: Create context locally
-    #keyValue.create_context(context_id)
-    #print(f"New context '{context_id}' created successfully.")
+   
 
 def user_create_query(user_message):
     """
@@ -527,37 +481,9 @@ def user_create_query(user_message):
         response_dict[context_id].clear()
     
 
-    # Step 1: Get consensus from all servers
+    # Get consensus from all servers
     get_consensus(user_message)
-    # if not consensus:
-    #     print("Consensus failed. Unable to create new query.")
-    #     return
-
-    # Step 2: Send CREATE_QUERY message to all servers (MODIFY TO SEND JSON)
-    #message_args = {
-    #    "context_id": context_id,
-    #     "query_string": query_string
-    # }
-    # send_server_message(message.CREATE_QUERY, -1, message_args)
-
-    # # Step 3: Create query locally
-    # keyValue.create_query(context_id, query_string)
-
-    # # Step 4: Retrieve the context as a string
-    # context_string = keyValue.view(context_id)
-    # if not context_string:
-    #     print(f"Error: Context '{context_id}' not found.")
-    #     return
-
-    # # Step 5: Query Gemini
-    # prompt_answer = "Answer: "
-    # response = query_gemini(context_string + "\n" + prompt_answer)
-
-    # # Step 6: Add the response to local KeyValue storage
-    # keyValue.save_answer(context_id, response)
-
-    # # Step 7: Print the response
-    # print(f"LLM Response: {response}")
+    
 
 def user_select_answer(user_message):
     """
@@ -677,7 +603,7 @@ def start_leader_election():
     while num_leader_promises < MAX_SERVER_NUM - 2:
         time.sleep(0.1)
         if time.time() - start_time > (TIMEOUT_TIME):  # Check if TIMEOUT seconds have elapsed
-            print("TIMEOUT: Leader promises not received. Running leader election again.")
+            print("TIMEOUT: Leader promises not received.")
 
             # Restart leader election
             leader_init()

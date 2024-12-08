@@ -128,4 +128,3 @@ class KeyValue:
                 for query in queries
             ]
         return result
-

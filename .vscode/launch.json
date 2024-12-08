@@ -16,21 +16,21 @@
       "console": "integratedTerminal",
     },
     {
-      "name": "server1",
+      "name": "serverA",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/server.py",
       "console": "integratedTerminal",
     },
     {
-      "name": "server2",
+      "name": "serverB",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/server.py",
       "console": "integratedTerminal",
     },
     {
-      "name": "server3",
+      "name": "serverC",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/server.py",
@@ -43,9 +43,9 @@
       "name": "Start All Servers",
       "configurations": [
         "network_server",
-        "server1",
-        "server2",
-        "server3"
+        "serverA",
+        "serverB",
+        "serverC"
       ]
     }
   ]

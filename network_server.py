@@ -7,8 +7,6 @@ import json
 from shared import message, NETWORK_SERVER_PORT, MAX_SERVER_NUM, DELAY
 import threading
 
-
-
 # Global Variables
 global server_running
 stop_event = threading.Event()
@@ -211,24 +209,6 @@ def run_server():
             #Timeout enabled so that will be nonblocking
             continue
 
-# Handle incoming server messages
-# def get_server_message(server):
-#     """
-#     Dakota
-#     Pseudocode:
-#     - Wait for server messages
-#     - Process messages based on their content
-#     """
-#     while not stop_event.is_set():
-#         try:
-#             server_message = server.recv(1024).decode('utf-8') #Receive server response
-#             if not server_message:
-#                 print("Server Disconnected")
-#                 break
-#             threading.Thread(target=forward_server_message, args=(server_message,)).start()
-#         except socket.error:
-#             continue
-
 def get_server_message(server):
     """
     Continuously receive and buffer messages from a server.
@@ -261,8 +241,6 @@ def get_server_message(server):
             print("Server Disconnected")
             break
             #continue
-
-
 
 # Forward messages to appropriate destinations
 def forward_server_message(server_message):
@@ -329,21 +307,6 @@ def check_forward_connection(src_soc, dest_soc, src, dest, message_type):
 
         return True
 
-# Check the status of links and nodes
-def check_status():
-    """
-    Pseudocode:
-    - Periodically check link and node statuses
-    - Print or log any changes in status
-    """
-
-# Main function to run the server
-def main():
-    """
-    Pseudocode:
-    - Setup socket information
-    - Start server and user input threads
-    """
 
 if __name__ == "__main__":
     print("Network Server")
