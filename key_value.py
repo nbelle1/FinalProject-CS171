@@ -54,7 +54,7 @@ class KeyValue:
             query_string (str): The query to add within the context.
         """
         if context_id not in self.data:
-            print(f"Context '{context_id}' does not exist. Please create it first.")
+            # print(f"Context '{context_id}' does not exist. Please create it first.")
             return
 
         self.data[context_id]["queries"].append(query_string)
@@ -80,7 +80,7 @@ class KeyValue:
         # Associate the response with the latest query
         latest_query = queries[-1]
         self.data[context_id]["responses"][latest_query] = response
-        print(f"Key Value: Response saved for the latest query '{latest_query}': {response}")
+        # print(f"Key Value: Response saved for the latest query '{latest_query}': {response}")
 
     def view(self, context_id):
         """

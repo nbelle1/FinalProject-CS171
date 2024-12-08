@@ -293,6 +293,10 @@ def server_new_context(user_message):
         if not context_id:
             print("Error Getting Context_id")
             return
+        
+        if context_id in keyValue.data:
+            print(f"Error: Context ID '{context_id}' already exists. Please use a unique ID.")
+            return
 
         # Create the new context using the keyValue object
         keyValue.create_context(context_id)
@@ -336,6 +340,11 @@ def server_create_query(message_data):
 
         if not context_string:
             print(f"Error: Context '{context_id}' not found.")
+            return
+        
+        # Check if the context exists in KeyValue
+        if context_id not in keyValue.data:
+            print(f"Error: Context ID '{context_id}' does not exist. Please create the context first.")
             return
         
         # Print updated context with query
@@ -466,6 +475,7 @@ def user_new_context(user_message):
     if not context_id:
         print("Error: Context ID cannot be empty.")
         return
+    
 
     # Step 1: Get consensus from all servers
     get_consensus(user_message)
@@ -509,6 +519,7 @@ def user_create_query(user_message):
     if not context_id or not query_string:
         print("Error: Context ID and query cannot be empty.")
         return
+    
     
     # Clear responses only for the given context_id
     global response_dict
