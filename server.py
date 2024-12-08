@@ -112,11 +112,11 @@ def send_server_message(message_type, dest_server, message_args=None):
     # Add accept_val to the print message if present
     accept_val_string = ""
     if message_args and "accept_val" in message_args:
-        accept_val = message_args["accept_val"]
-        accept_val_string = f"{accept_val}" if accept_val != -1 else "Bottom Bottom"
+        accept_val_txt = message_args["accept_val"]
+        accept_val_string = f"{accept_val_txt}" if accept_val_txt != -1 else "Bottom Bottom"
     
         # Make sure sending server isn't printed for query message
-        if accept_val != -1 and accept_val.startswith("query") and "." in accept_val:
+        if accept_val_txt != -1 and accept_val_txt.startswith("query") and "." in accept_val_txt:
             accept_val_string = accept_val_string.split(".", 1)[0]
         else:
             accept_val_string = accept_val_string
@@ -173,11 +173,11 @@ def get_server_message():
                     # Extract accept_val if present
                     accept_val_string = ""
                     if "accept_val" in args:
-                        accept_val = args["accept_val"]
-                        accept_val_string = f"{accept_val}" if accept_val != -1 else "Bottom Bottom"
+                        accept_val_txt = args["accept_val"]
+                        accept_val_string = f"{accept_val_txt}" if accept_val_txt != -1 else "Bottom Bottom"
 
                         # Make sure sending server isn't printed for query message
-                        if accept_val != -1 and accept_val.startswith("query") and "." in accept_val:
+                        if accept_val_txt != -1 and accept_val_txt.startswith("query") and "." in accept_val_txt:
                             accept_val_string = accept_val_string.split(".", 1)[0]
 
                     # Extract user_message if present
@@ -511,7 +511,7 @@ def user_select_answer(user_message):
             return
 
         #Check if valid Response Number
-        if response_number < 0 and response_number < len(response_dict[context_id]):
+        if response_number < 0 or response_number < len(response_dict[context_id]):
             print(f"Invalide Response Number {response_number}")
             return
         
@@ -607,6 +607,7 @@ def start_leader_election():
 
             # Restart leader election
             leader_init()
+            #get_consensus()
             return
         if stop_event.is_set():
             return
@@ -747,7 +748,8 @@ def server_leader_promise_message(message_data):
 def insert_operation_to_queue(user_message):
 
     #Insert message to queue
-    pending_operations.put((user_message))
+    if user_message not in list(pending_operations.queue):
+        pending_operations.put(user_message)
 
 def get_consensus(user_message):
     """
@@ -816,7 +818,9 @@ def run_leader():
                     leader = -1
 
                     # Restart leader election
-                    leader_init()
+                    #leader_init()
+                    get_consensus(accept_val)
+                    accept_val = -1
                     return
                 #If program gets told Kill message, exit gracefully
                 if stop_event.is_set():
