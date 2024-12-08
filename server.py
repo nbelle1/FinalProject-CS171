@@ -39,7 +39,7 @@ accept_num = -1
 #Used for operations
 pending_operations = Queue()
 num_leader_promises = 0
-num_consensus_accepted = 0
+consensus_accepted = {}
 leader_ack = 0
 
 #Used for Storing responses format = {tuple(context_id, query), list(responses)}
@@ -784,7 +784,8 @@ def get_consensus(user_message):
 
 def run_leader():
 
-    global num_consensus_accepted
+    #global num_consensus_accepted
+    global num_consensus
     global accept_val
     global accept_num
     global leader
@@ -803,12 +804,12 @@ def run_leader():
                 "accept_val": accept_val,
             }
             #Send Accept? message to all servers with message
-            num_consensus_accepted = 0
+            consensus_accepted[ballot_to_string(ballot_number)] = 0
             send_server_message(message.ACCEPT, -1, accept_message_args)
 
             # Wait for all servers to respond with a timeout
             start_time = time.time()  # Record the start time
-            while num_consensus_accepted < MAX_SERVER_NUM - 2:
+            while consensus_accepted[ballot_to_string(ballot_number)] < MAX_SERVER_NUM - 2:
                 time.sleep(0.1)
                 if time.time() - start_time > (TIMEOUT_TIME):  # Check if TIMEOUT seconds have elapsed
                     print("TIMEOUT: Accepted messages not received, running new leader election again.")
@@ -821,10 +822,7 @@ def run_leader():
                 if stop_event.is_set():
                     return
             
-
-            #TODO Maybe: Remove from pending operations now??
-
-            #TODO: Op num increment moved to before insertion
+            del consensus_accepted[ballot_to_string(ballot_number)]
 
             #Broadcast consensus decide
             decide_message_args = {
@@ -871,8 +869,11 @@ def server_consensus_accepted_message(message_data):
         send_server_message(message.UPDATE_CONTEXT, message_data.get("sending_server"), message_args)
         
     time.sleep(.2)
-    global num_consensus_accepted
-    num_consensus_accepted += 1
+
+    #increment consensus accepted counter for the ballot
+    b = ballot_to_string(args.get("ballot_number"))
+    if b in consensus_accepted:
+        consensus_accepted[b] += 1
 
 def server_consensus_accept_message(message_data):
     
