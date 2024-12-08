@@ -802,7 +802,7 @@ def server_leader_promise_message(message_data):
         if accept_num == -1:
             accept_num = received_accept_num
             accept_val = received_accept_val
-        elif accept_num != -1 and received_accept_num > accept_num:
+        elif accept_num != -1 and (received_accept_num["seq_num"] > accept_num["seq_num"] or (received_accept_num["seq_num"] == accept_num["seq_num"] and received_accept_num["pid"] > accept_num["pid"])):
             accept_num = received_accept_num
             accept_val = received_accept_val
 
@@ -977,6 +977,9 @@ def server_consensus_accept_message(message_data):
 
             # Set a help flag if acceptor has a lower number of operations completed than leader
             help_needed = ballot["op_num"] > ballot_number["op_num"]
+
+            # Set maximum known ballot number to recieved ballot
+            ballot_number = ballot
             
             message_args = {
                 "ballot_number": ballot_number,
@@ -989,8 +992,7 @@ def server_consensus_accept_message(message_data):
             global leader
             leader = sending_server
 
-            # Set maximum known ballot number to recieved ballot
-            ballot_number = ballot
+            
 
 
 def server_consensus_decide_message(message_data):

@@ -27,7 +27,7 @@ class message(Enum):
 
 NETWORK_SERVER_PORT = 9000
 MAX_SERVER_NUM = 3
-DELAY = 1
+DELAY = 3
 TIMEOUT_TIME = DELAY * 3
 
 """
