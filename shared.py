@@ -28,7 +28,7 @@ class message(Enum):
 NETWORK_SERVER_PORT = 9000
 MAX_SERVER_NUM = 3
 DELAY = 3
-TIMEOUT_TIME = DELAY * 3
+TIMEOUT_TIME = DELAY * 2.25
 
 """
 JSON Format:
@@ -64,7 +64,7 @@ message_data
         if LLM_RESPONSE:
             "context_id": int
             "query_string": string
-            "response": string
+            "response":d string
         if UPDATE_CONTEXT:
             "context": KeyValue
             "op_num": int

@@ -274,30 +274,33 @@ def forward_server_message(server_message):
     - Otherwise, forward to the specified destination
     Message format <destination server> <rest of message>
     """
-    #Required Interval Between Message Passing
-    time.sleep(DELAY)
+    #Get Json Datastructure from message
+    message_data = json.loads(server_message)
+    message_type = message_data["message_type"]
+
+    #Delay for required time period (if not kill command)
+    if message_type != message.SERVER_KILL.value:
+        time.sleep(DELAY)
+
     try:
         #Lock to protect prints and sending messages
         with lock:
-            #Get Json Datastructure from message
-            message_data = json.loads(server_message)
 
             #Determine destination server number from message_data
             dest_server_num = message_data["dest_server"]
             sending_server = message_data["sending_server"]
-            message_type = message_data["message_type"]
             
             #if server number is -1 send message to all except sender
             if dest_server_num == -1:
                 for count, soc in enumerate(socket_info[0]):
-                    if count != sending_server and check_forward_connection(soc, sending_server, count, message_type):
+                    if count != sending_server and check_forward_connection(socket_info[0][sending_server], soc, sending_server, count, message_type):
                         soc.send(server_message.encode('utf-8'))
                 
             #else send to specific server_num
             else:
                 #Get socket from socket_info and server_num
                 dest_server = socket_info[0][dest_server_num]
-                if check_forward_connection(dest_server, sending_server, dest_server_num, message_type):
+                if check_forward_connection(socket_info[0][sending_server], dest_server, sending_server, dest_server_num, message_type):
                     dest_server.send(server_message.encode('utf-8'))
 
             #If sending Kill message close connection to server
@@ -311,8 +314,8 @@ def forward_server_message(server_message):
         print(f"FAILED FORWARDING MESSAGE: {server_message}")
         print(f"ERROR: {e}")
 
-def check_forward_connection(dest_soc, src, dest, message_type):
-    if dest_soc is None:
+def check_forward_connection(src_soc, dest_soc, src, dest, message_type):
+    if src_soc is None or dest_soc is None:
         print(f"Broken Node {src} to {dest} for {message(message_type)}")
         return False
     #Check if Link is down

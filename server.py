@@ -867,11 +867,6 @@ def run_leader():
             num_consensus_accepted = 0
             send_server_message(message.ACCEPT, -1, accept_message_args)
 
-            #Wait for all servers to respond
-            while num_consensus_accepted < MAX_SERVER_NUM - 2:
-                time.sleep(0.1)
-                #TODO: TIMOUT FOR FAILURE
-
             # Wait for all servers to respond with a timeout
             start_time = time.time()  # Record the start time
             while num_consensus_accepted < MAX_SERVER_NUM - 2:
@@ -883,6 +878,10 @@ def run_leader():
                     # Restart leader election
                     leader_init()
                     return
+                #If program gets told Kill message, exit gracefully
+                if stop_event.is_set():
+                    return
+            
 
             #TODO Maybe: Remove from pending operations now??
 
