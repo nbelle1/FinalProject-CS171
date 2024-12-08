@@ -608,6 +608,8 @@ def start_leader_election():
             # Restart leader election
             leader_init()
             return
+        if stop_event.is_set():
+            return
 
     
     leader = SERVER_NUM
