@@ -7,6 +7,7 @@ import threading
 import os
 import json
 import select
+import copy
 import google.generativeai as genai
 from dotenv import load_dotenv
 from queue import Queue
@@ -563,7 +564,7 @@ def user_view_all_context():
 
 # ------  CONSENSUS  ------
     
-def ballot_to_string(ballot_number):
+def ballot_to_string(ballot_num):
     """
     Converts a ballot dictionary into a string representation.
     
@@ -573,7 +574,7 @@ def ballot_to_string(ballot_number):
     Returns:
         str: The string representation of the ballot in the format "<seq_num, pid, op_num>".
     """
-    return f"<{ballot_number['seq_num']}, {ballot_number['pid']}, {ballot_number['op_num']}>" 
+    return f"<{ballot_num['seq_num']}, {ballot_num['pid']}, {ballot_num['op_num']}>" 
 
     
 # --- Election Phase ---
@@ -605,6 +606,10 @@ def start_leader_election():
         if time.time() - start_time > (TIMEOUT_TIME):  # Check if TIMEOUT seconds have elapsed
             print("TIMEOUT: Leader promises not received.")
 
+            # Added by Nik
+            if ballot_number["pid"] != SERVER_NUM:
+                return
+            
             # Restart leader election
             leader_init()
             #get_consensus()
@@ -612,6 +617,15 @@ def start_leader_election():
         if stop_event.is_set():
             return
 
+    
+    # # Added by Nik to handle getting another prepare 
+    # if(ballot_number["pid"] != SERVER_NUM):
+    #     leader_init()
+    #     return
+
+    if ballot_number["pid"] != SERVER_NUM:
+        leader = ballot_number["pid"]
+        return
     
     leader = SERVER_NUM
     threading.Thread(target=run_leader).start()
@@ -660,7 +674,6 @@ def server_leader_prepare_message(message_data):
             # Set a help flag if acceptor has a lower number of operations completed than leader
             help_needed = ballot["op_num"] > ballot_number["op_num"]
         
-            
             ballot_number = ballot
             
             message_args = {
@@ -795,6 +808,8 @@ def run_leader():
     while not stop_event.is_set():
         if not pending_operations.empty():
 
+            ball_num = copy.deepcopy(ballot_number)
+
             if accept_val == -1:
                 #Pop the next operation
                 user_message = pending_operations.get()
@@ -802,16 +817,25 @@ def run_leader():
 
             # Use leader's ballot_number and accept_val
             accept_message_args = {
-                "ballot_number": ballot_number,
+                "ballot_number": ball_num,
                 "accept_val": accept_val,
             }
             #Send Accept? message to all servers with message
-            consensus_accepted[ballot_to_string(ballot_number)] = 0
+            consensus_accepted[ballot_to_string(ball_num)] = 0
+
+           
+
+            # added by Nik
+            if ballot_number["pid"] != SERVER_NUM:
+                leader = ballot_number["pid"]
+                return
+            
             send_server_message(message.ACCEPT, -1, accept_message_args)
+
 
             # Wait for all servers to respond with a timeout
             start_time = time.time()  # Record the start time
-            while consensus_accepted[ballot_to_string(ballot_number)] < MAX_SERVER_NUM - 2:
+            while consensus_accepted[ballot_to_string(ball_num)] < MAX_SERVER_NUM - 2:
                 time.sleep(0.1)
                 if time.time() - start_time > (TIMEOUT_TIME):  # Check if TIMEOUT seconds have elapsed
                     print("TIMEOUT: Accepted messages not received, running new leader election again.")
@@ -821,12 +845,13 @@ def run_leader():
                     #leader_init()
                     get_consensus(accept_val)
                     accept_val = -1
+                    accept_num = -1
                     return
                 #If program gets told Kill message, exit gracefully
                 if stop_event.is_set():
                     return
             
-            del consensus_accepted[ballot_to_string(ballot_number)]
+            del consensus_accepted[ballot_to_string(ball_num)]
 
             #Broadcast consensus decide
             decide_message_args = {
@@ -895,7 +920,7 @@ def server_consensus_accept_message(message_data):
         if ballot["op_num"] < ballot_number["op_num"]:
             message_args = {
                 # TODO: Is KeyValue the best way to send all of the context?
-                "context": keyValue,
+                "context": keyValue.to_dict(),
                 "op_num": ballot_number["op_num"]
             }
             send_server_message(message.UPDATE_CONTEXT, sending_server, message_args)
@@ -941,7 +966,10 @@ def server_consensus_decide_message(message_data):
 
     args = message_data.get("args", {})
     user_message = args.get("accept_val")
-    if user_message.startswith("create"):
+
+    if user_message == -1:
+        return
+    elif user_message.startswith("create"):
         server_new_context(user_message)
     elif user_message.startswith("query"):
         server_create_query(message_data)
