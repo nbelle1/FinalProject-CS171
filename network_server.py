@@ -293,6 +293,12 @@ def forward_server_message(server_message):
         print(f"ERROR: {e}")
 
 def check_forward_connection(src_soc, dest_soc, src, dest, message_type):
+    
+    #Handle Case when sending Kill message directly from Network Server
+    if src == -1:
+        return True
+    
+    #Check if servers down
     if src_soc is None or dest_soc is None:
         print(f"Broken Node {src} to {dest} for {message(message_type)}")
         return False
