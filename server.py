@@ -512,7 +512,7 @@ def user_select_answer(user_message):
             return
 
         #Check if valid Response Number
-        if response_number < 0 or response_number < len(response_dict[context_id]):
+        if response_number < 0 or response_number >= len(response_dict[context_id]):
             print(f"Invalide Response Number {response_number}")
             return
         
